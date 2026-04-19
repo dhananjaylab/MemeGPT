@@ -46,14 +46,29 @@ class Settings(BaseSettings):
     stripe_price_api: str = ""
     
     # Cloudflare R2
-    r2_access_key: str = ""
-    r2_secret_key: str = ""
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
     r2_bucket_name: str = "memegpt-images"
-    r2_endpoint_url: str = ""
     r2_public_url: str = ""
+
+    @property
+    def r2_endpoint_url(self) -> str:
+        if not self.r2_account_id:
+            return ""
+        return f"https://{self.r2_account_id}.r2.cloudflarestorage.com"
+
+    @property
+    def r2_access_key(self) -> str:
+        return self.r2_access_key_id
+
+    @property
+    def r2_secret_key(self) -> str:
+        return self.r2_secret_access_key
 
     class Config:
         env_file = ".env"
+        extra = "ignore" # Ignore extra env vars
 
 
 settings = Settings()

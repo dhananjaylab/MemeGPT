@@ -153,6 +153,7 @@ class MemeTemplate(Base):
     number_of_text_fields: int = Column(Integer, nullable=False)
     text_coordinates_xy_wh: List[List[int]] = Column(JSON, nullable=False)
     example_output: List[str] = Column(JSON, nullable=False)
+    image_url: Optional[str] = Column(String, nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now())
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
