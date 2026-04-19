@@ -17,11 +17,11 @@
 - [x] 1.2.5 Implement database backup before migration
 
 ### 1.3 Rate Limiting Service Integration
-- [ ] 1.3.1 Integrate rate_limit.py from new-change folder
-- [ ] 1.3.2 Setup Redis connection for rate limit storage
-- [ ] 1.3.3 Implement sliding window rate limiting logic
-- [ ] 1.3.4 Add rate limit middleware to FastAPI routes
-- [ ] 1.3.5 Configure different limits for user tiers
+- [x] 1.3.1 Integrate rate_limit.py from new-change folder
+- [x] 1.3.2 Setup Redis connection for rate limit storage
+- [x] 1.3.3 Implement sliding window rate limiting logic
+- [x] 1.3.4 Add rate limit middleware to FastAPI routes
+- [x] 1.3.5 Configure different limits for user tiers
 
 <!-- ### 1.4 Stripe Billing Integration
 - [ ] 1.4.1 Integrate stripe.py from new-change folder
@@ -33,14 +33,14 @@
 ## 2. Frontend Migration and Enhancement
 
 ### 2.1 Component Integration
-- [ ] 2.1.1 Integrate DashboardClient.tsx into Next.js app structure
-- [ ] 2.1.2 Integrate GalleryClient.tsx into Next.js app structure
+- [ ] 2.1.1 Integrate DashboardClient.tsx into React.js app structure
+- [ ] 2.1.2 Integrate GalleryClient.tsx into React.js app structure
 - [ ] 2.1.3 Create routing for new dashboard and gallery pages
 - [ ] 2.1.4 Update existing components to work with new API structure
 - [ ] 2.1.5 Implement error boundaries for new components
 
 ### 2.2 Authentication Implementation
-- [ ] 2.2.1 Setup NextAuth.js configuration
+- [ ] 2.2.1 Setup ReactAuth.js configuration
 - [ ] 2.2.2 Configure OAuth providers (Google, GitHub)
 - [ ] 2.2.3 Implement protected route middleware
 - [ ] 2.2.4 Create login/logout UI components

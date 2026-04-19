@@ -59,6 +59,7 @@ class GeneratedMeme(Base):
     image_url: str = Column(String, nullable=False)
     thumbnail_url: Optional[str] = Column(String, nullable=True)
     share_count: int = Column(Integer, default=0, index=True)
+    like_count: int = Column(Integer, default=0, index=True)
     is_public: bool = Column(Boolean, default=True, index=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     

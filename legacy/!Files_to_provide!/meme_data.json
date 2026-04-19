@@ -1,0 +1,224 @@
+[
+  {
+    "id": 0,
+    "name": "Drake Hotline Bling Meme",
+    "alternative_names": ["drakeposting", "drakepost", "drake like dislike"],
+    "file_path": "Drake-Hotline-Bling.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Drake Hotline Bling Meme is used to humorously express preference or approval for one thing over another. It features two panels with rapper Drake. In the first panel, Drake is rejecting something, while in the second panel, he is showing approval for something else. Users overlay text or images to depict contrasting options or decisions. Make sure the first sentence is the thing to be rejected and the second sentence is the thing to be approved.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [620, 20, 560, 560],
+      [620, 620, 560, 560]
+    ],
+    "example_output": ["Monday mornings", "Friday afternoons"]
+  },
+  {
+    "id": 1,
+    "name": "Distracted Boyfriend",
+    "alternative_names": [
+      "guy checking out another girl",
+      "jealous girlfriend",
+      "wandering eyes"
+    ],
+    "file_path": "Distracted-Boyfriend.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Distracted Boyfriend Meme is used to humorously illustrate situations where an individual is enticed by something new while neglecting their current situation or commitment. It features a stock photo where a man looks at another woman passing by, despite being with his girlfriend. Text or images can be added to label each figure to portray different scenarios or choices. Make sure that the first sentence has the seductive thing in it, the second sentence has the person/group being seduced (e.g. 'Me' or 'Microsoft'), and the third sentence has the current commitment.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [150, 500, 400, 250],
+      [645, 330, 200, 200],
+      [890, 400, 260, 260]
+    ],
+    "example_output": ["New shiny idea", "Me", "Current project deadline"]
+  },
+  {
+    "id": 2,
+    "name": "Left Exit 12 Off Ramp",
+    "alternative_names": [
+      "car drifts off highway",
+      "car drift meme",
+      "freeway exit"
+    ],
+    "file_path": "Left-Exit-12-Off-Ramp.jpg",
+    "font_path": "ARIAL.TTF",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Left Exit 12 Off Ramp meme is used to humorously illustrate a sudden change in choice or direction, often reflecting impulsive or irrational decisions. It usually features an image of a car veering sharply off a main road towards an unexpected exit. Users overlay text on the road signs and the car to depict a decision-making scenario, where the main road represents an expected or conventional choice, while the exit represents a tempting distraction or alternative. The first sentence should be the main road, the second is the person/group represented by the car (e.g. 'Me' or 'All kids under 5'), and the third sentence should be the chosen tempting distraction road.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [185, 90, 130, 175],
+      [300, 530, 220, 100],
+      [400, 90, 190, 180]
+    ],
+    "example_output": ["Staying home and studying", "Me", "Going out with friends"]
+  },
+  {
+    "id": 3,
+    "name": "UNO Draw 25 Cards",
+    "alternative_names": [
+      "do something you don't like or draw 25 cards",
+      "uno or draw 25",
+      "draw 25 meme"
+    ],
+    "file_path": "UNO-Draw-25-Cards.jpg",
+    "font_path": "ComicSansMS3.ttf",
+    "text_color": "black",
+    "text_stroke": false,
+    "usage_instructions": "The UNO Draw 25 Cards meme is used to humorously depict a situation where someone is faced with an undesirable task or decision, and comically choosing an impossible or excessive alternative instead. The format features two panels: the first presents an unwanted task or choice, while the second panel shows a hand drawing 25 cards in a game of UNO, implying the choice of the latter option over the undesirable task. The first panel shows the unwanted task or choice, while the second panel has the name of the person or thing that does not want the task or choice. The first sentence here must refer to the undesirable or unacceptable task, and the second sentence must refer to the person or thing that does not want the task or choice (e.g. 'Me', 'Italians', 'Young people').",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [75, 135, 161, 112],
+      [285, 5, 183, 59]
+    ],
+    "example_output": ["Admit pineapple can go on pizza", "Italians"]
+  },
+  {
+    "id": 4,
+    "name": "One Does Not Simply",
+    "alternative_names": [
+      "one does not simply walk into Mordor",
+      "lord of the rings Boromir",
+      "one does not simply blank"
+    ],
+    "file_path": "One-Does-Not-Simply.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The 'One Does Not Simply' meme is used to humorously highlight the difficulty or improbability of a task or situation. It features a still image of Boromir from the Lord of the Rings, with the caption 'One does not simply...' followed by the action or task being described. Users customize the second part of the caption to fit their specific humorous or sarcastic message. The first sentence must always be 'One does not simply,' and the second sentence has the difficult or improbable task.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [21, 6, 528, 50],
+      [21, 235, 528, 100]
+    ],
+    "example_output": [
+      "One does not simply",
+      "finish a Netflix series without binge-watching."
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Expanding Brain",
+    "alternative_names": ["levels of intelligence", "expanding mind", "500 iq"],
+    "file_path": "Expanding-Brain.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Expanding Brain meme is used to humorously depict different levels of intelligence or thought processes. It consists of a series of images showing progressively expanding and glowing brains to represent increasingly sophisticated or complex ways of thinking about a subject. Users overlay text on each brain level to show the progression of thought or intelligence. The output are 4 separate sentences which represent increasing levels of intelligence for dealing with a situation.",
+    "number_of_text_fields": 4,
+    "text_coordinates_xy_wh": [
+      [15, 20, 390, 264],
+      [15, 320, 390, 273],
+      [15, 628, 390, 240],
+      [15, 910, 390, 275]
+    ],
+    "example_output": [
+      "Trying to fix the problem by restarting",
+      "Turning it off and on again",
+      "Googling the error message",
+      "Reading the manual cover to cover"
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Hide the Pain Harold",
+    "alternative_names": ["sad life harold", "maurice", "herold"],
+    "file_path": "Hide-the-Pain-Harold.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Hide the Pain Harold meme is used to depict someone hiding their discomfort or inner turmoil behind a forced smile. The image features an elderly man, known as Harold, smiling despite a look of hidden suffering in his eyes. It's often used online to humorously express situations where one appears cheerful or calm outwardly but is actually experiencing discomfort or dissatisfaction internally. The first sentence should be the situation that is outwardly happy (e.g. 'I ate all the chocolate'), and the second sentence should be the true feelings or situation (e.g. 'Realized I have nothing for desert').",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [12, 225, 455, 77],
+      [12, 515, 455, 77]
+    ],
+    "example_output": ["Everything is fine", "Realizing it's only Monday"]
+  },
+  {
+    "id": 7,
+    "name": "Success Kid",
+    "alternative_names": ["Motivation Baby", "Motivation Kid", "Success Baby"],
+    "file_path": "Success-Kid.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Success Kid meme is used to convey a sense of triumph or victory, often in a humorous or endearing way. It features a toddler with a clenched fist and determined expression, typically accompanied by text describing personal successes or fortunate events. Users add captions to highlight small achievements or lucky outcomes, usually starting with a setup in the top text and a victorious realization in the bottom text. The whole idea is described in two sentences, where the first sentence is the setup and the second sentence is the victorious realization.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [15, 15, 470, 90],
+      [15, 395, 470, 90]
+    ],
+    "example_output": ["Forgot to study for the exam.", "Exam got postponed!"]
+  },
+  {
+    "id": 8,
+    "name": "But That's None Of My Business",
+    "alternative_names": [
+      "kermit drinking lipton iced tea",
+      "kermit lipton",
+      "kermit drinking tea"
+    ],
+    "file_path": "But-Thats-None-Of-My-Business.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The 'But That's None Of My Business' meme features Kermit the Frog sipping tea, typically used to highlight a controversial observation or hypocrisy without directly involving oneself in the situation. It's often accompanied by a statement pointing out the issue, followed by the phrase 'but that's none of my business,' implying that the speaker is merely an observer who isn't taking any sides. The first sentence should be the controversial observation or hypocrisy, and the second sentence is always the exact phrase 'but that's none of my business.'",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [15, 10, 570, 120],
+      [15, 485, 570, 100]
+    ],
+    "example_output": [
+      "People who always complain about being tired never go to bed early.",
+      "But that's none of my business."
+    ]
+  },
+  {
+    "id": 9,
+    "name": "Disaster Girl",
+    "alternative_names": [
+      "evil girl fire",
+      "girl house on fire",
+      "arson girl"
+    ],
+    "file_path": "Disaster-Girl.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Disaster Girl meme is used to convey a sense of mischievous satisfaction or humor at being potentially responsible for a disastrous situation. It features a young girl with a sly smile in the foreground, while a house burns in the background. Users overlay text or images to humorously suggest that something catastrophic happened, possibly due to their actions. The first sentence should be the situation that appears disastrous (e.g. 'When your friend pulls a prank'), and the second sentence should reveal the true cause or intention (e.g. 'But you're the mastermind behind it').",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 480, 75],
+      [10, 240, 280, 125]
+    ],
+    "example_output": [
+      "When your friend pulls a prank",
+      "But you're the mastermind behind it."
+    ]
+  },
+  {
+    "id": 10,
+    "name": "Roll Safe Think About It",
+    "alternative_names": [
+      "guy tapping head",
+      "whimsical guy",
+      "terrible genius advice"
+    ],
+    "file_path": "Roll-Safe-Think-About-It.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "usage_instructions": "The Roll Safe Think About It meme is used to convey a humorous piece of advice or clever thinking. It features a man tapping his temple, suggesting he has come up with a smart, albeit sometimes sarcastic or flawed, solution. Users often insert text above or below the image to highlight situations where one finds a loophole or an unexpected solution. In this one both of the sentences combine to form a single piece of ridiculous/clever advice, where the first sentence often acts as the desired result (e.g. 'Nobody can beat you at chess') and the second sentence will have the ridiculous advice to achieve this (e.g. 'If you never play').",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 683, 70],
+      [10, 314, 683, 70]
+    ],
+    "example_output": ["No one can call you late", "If you never show up."]
+  }
+]

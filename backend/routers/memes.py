@@ -8,7 +8,7 @@ from ..db.session import get_db
 from ..models.models import GeneratedMeme, User
 from ..services.auth import get_current_user_optional
 from ..services.rate_limit import rate_limit_request
-from ..services.worker import enqueue_meme_generation
+from ..workers.meme_worker import enqueue_meme_generation
 
 router = APIRouter()
 
@@ -30,6 +30,7 @@ class MemeResponse(BaseModel):
     image_url: str
     created_at: str
     share_count: int
+    like_count: int
 
 
 @router.post("/generate", response_model=GenerateMemeResponse)
@@ -41,8 +42,8 @@ async def generate_meme(
 ):
     """Generate memes from user prompt (async with job queue)"""
     
-    # Check rate limits
-    used, remaining = await rate_limit_request(request, current_user)
+    # Rate limit check is now handled by middleware
+    remaining = getattr(request.state, "rate_limit_remaining", 0)
     
     # Validate prompt
     if not body.prompt.strip():
@@ -114,7 +115,8 @@ async def get_public_memes(
             meme_text=meme.meme_text,
             image_url=meme.image_url,
             created_at=meme.created_at.isoformat(),
-            share_count=meme.share_count
+            share_count=meme.share_count,
+            like_count=meme.like_count
         )
         for meme in memes
     ]
@@ -160,7 +162,8 @@ async def get_my_memes(
             meme_text=meme.meme_text,
             image_url=meme.image_url,
             created_at=meme.created_at.isoformat(),
-            share_count=meme.share_count
+            share_count=meme.share_count,
+            like_count=meme.like_count
         )
         for meme in memes
     ]
@@ -189,7 +192,8 @@ async def get_meme(
         meme_text=meme.meme_text,
         image_url=meme.image_url,
         created_at=meme.created_at.isoformat(),
-        share_count=meme.share_count
+        share_count=meme.share_count,
+        like_count=meme.like_count
     )
 
 
@@ -214,6 +218,26 @@ async def share_meme(
     await db.commit()
     
     return {"message": "Share count updated", "share_count": meme.share_count}
+
+
+@router.post("/{meme_id}/like")
+async def like_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Increment like count for a meme"""
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    # Increment like count
+    meme.like_count += 1
+    await db.commit()
+    
+    return {"message": "Liked", "liked": True, "like_count": meme.like_count}
 
 
 @router.delete("/{meme_id}")
