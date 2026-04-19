@@ -1,0 +1,166 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.root{padding:1.5rem 0}
+.section-label{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-tertiary);margin-bottom:.75rem}
+.phase-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:1.5rem}
+.phase-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem;cursor:pointer;transition:border-color .15s}
+.phase-card:hover{border-color:var(--color-border-secondary)}
+.phase-card.active{border-width:1.5px}
+.phase-card.p1.active{border-color:#0F6E56}
+.phase-card.p2.active{border-color:#534AB7}
+.phase-card.p3.active{border-color:#BA7517}
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;margin-bottom:.6rem}
+.b-teal{background:#E1F5EE;color:#085041}
+.b-purple{background:#EEEDFE;color:#3C3489}
+.b-amber{background:#FAEEDA;color:#633806}
+.phase-title{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:.3rem}
+.phase-sub{font-size:12px;color:var(--color-text-secondary);line-height:1.5}
+.detail-panel{background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:1.25rem;margin-bottom:1.5rem;min-height:180px}
+.dp-title{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem}
+.feat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.feat-item{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.6rem .8rem}
+.feat-name{font-size:13px;font-weight:500;color:var(--color-text-primary)}
+.feat-desc{font-size:12px;color:var(--color-text-secondary);margin-top:2px;line-height:1.4}
+.stack-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:1.5rem}
+.stack-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.75rem}
+.stack-layer{font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px;font-weight:500}
+.stack-name{font-size:13px;font-weight:500;color:var(--color-text-primary)}
+.stack-detail{font-size:11px;color:var(--color-text-secondary);margin-top:2px;line-height:1.4}
+.arch-row{display:flex;align-items:stretch;gap:0;margin-bottom:1.5rem;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.arch-layer{flex:1;padding:.75rem;border-right:0.5px solid var(--color-border-tertiary)}
+.arch-layer:last-child{border-right:none}
+.arch-layer-name{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem}
+.arch-items{display:flex;flex-direction:column;gap:4px}
+.arch-pill{font-size:11px;padding:2px 7px;border-radius:4px;display:inline-block;width:fit-content}
+.ap-teal{background:#E1F5EE;color:#085041}
+.ap-purple{background:#EEEDFE;color:#3C3489}
+.ap-amber{background:#FAEEDA;color:#633806}
+.ap-coral{background:#FAECE7;color:#4A1B0C}
+.ap-gray{background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.traffic-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.traffic-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.75rem}
+.traffic-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:.3rem}
+.traffic-strat{font-size:13px;font-weight:500;color:var(--color-text-primary);line-height:1.4}
+</style>
+<div class="root">
+  <p class="section-label">Tech stack</p>
+  <div class="arch-row">
+    <div class="arch-layer">
+      <div class="arch-layer-name">Frontend</div>
+      <div class="arch-items">
+        <span class="arch-pill ap-teal">Next.js 15 (React)</span>
+        <span class="arch-pill ap-teal">Tailwind CSS</span>
+        <span class="arch-pill ap-teal">shadcn/ui</span>
+        <span class="arch-pill ap-teal">NextAuth.js</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-name">Backend</div>
+      <div class="arch-items">
+        <span class="arch-pill ap-purple">FastAPI</span>
+        <span class="arch-pill ap-purple">ARQ (async jobs)</span>
+        <span class="arch-pill ap-purple">SQLAlchemy</span>
+        <span class="arch-pill ap-purple">Alembic</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-name">AI &amp; Storage</div>
+      <div class="arch-items">
+        <span class="arch-pill ap-amber">OpenAI GPT-4o</span>
+        <span class="arch-pill ap-amber">Claude (fallback)</span>
+        <span class="arch-pill ap-amber">PostgreSQL</span>
+        <span class="arch-pill ap-amber">Cloudflare R2</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-name">Infrastructure</div>
+      <div class="arch-items">
+        <span class="arch-pill ap-coral">Redis (cache/queue)</span>
+        <span class="arch-pill ap-coral">Vercel (frontend)</span>
+        <span class="arch-pill ap-coral">Railway/Render</span>
+        <span class="arch-pill ap-coral">Stripe (payments)</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="section-label">Build phases — click to explore</p>
+  <div class="phase-grid">
+    <div class="phase-card p1 active" id="card-p1" onclick="selectPhase('p1')">
+      <div class="badge b-teal">Phase 1 — Weeks 1–3</div>
+      <div class="phase-title">Strong foundation</div>
+      <div class="phase-sub">Next.js UI · FastAPI backend · 50+ templates · async generation</div>
+    </div>
+    <div class="phase-card p2" id="card-p2" onclick="selectPhase('p2')">
+      <div class="badge b-purple">Phase 2 — Weeks 4–6</div>
+      <div class="phase-title">Viral growth features</div>
+      <div class="phase-sub">Auth · meme history · social sharing · OG image cards</div>
+    </div>
+    <div class="phase-card p3" id="card-p3" onclick="selectPhase('p3')">
+      <div class="badge b-amber">Phase 3 — Weeks 7–10</div>
+      <div class="phase-title">Traffic &amp; monetisation</div>
+      <div class="phase-sub">Trending topics · public API · embed widget · Stripe</div>
+    </div>
+  </div>
+
+  <div class="detail-panel" id="detail-panel">
+    <div class="dp-title" id="dp-title">Phase 1 — Strong foundation</div>
+    <div class="feat-grid" id="dp-feats"></div>
+  </div>
+
+  <p class="section-label">Traffic strategy</p>
+  <div class="traffic-grid">
+    <div class="traffic-card">
+      <div class="traffic-label">Viral / social</div>
+      <div class="traffic-strat">One-click share to X, Reddit, WhatsApp with auto-generated OG card showing the meme</div>
+    </div>
+    <div class="traffic-card">
+      <div class="traffic-label">SEO &amp; organic</div>
+      <div class="traffic-strat">Public meme gallery pages, trending-topic landing pages, sitemap auto-generation</div>
+    </div>
+    <div class="traffic-card">
+      <div class="traffic-label">Developer community</div>
+      <div class="traffic-strat">Public REST API with API key auth, embeddable widget, GitHub README with badge</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const phases={
+  p1:{title:'Phase 1 — Strong foundation',feats:[
+    {name:'Next.js 15 frontend',desc:'Replace Streamlit with a production-quality React UI — responsive, fast, SEO-ready'},
+    {name:'50+ meme templates',desc:'Expand from 11 → 50+ templates in meme_data.json with proper bounding box coords'},
+    {name:'Async generation via ARQ',desc:'FastAPI + ARQ job queue — non-blocking meme gen, WebSocket progress updates'},
+    {name:'CORS + API security',desc:'Fix known CORS gaps, add rate limiting, input validation, proper error handling'},
+    {name:'Cloudflare R2 storage',desc:'Persistent meme image storage instead of local /output folder'},
+    {name:'Mobile-first design',desc:'Full responsive UI — meme grid, input area, share buttons all touch-optimized'}
+  ]},
+  p2:{title:'Phase 2 — Viral growth features',feats:[
+    {name:'User auth (NextAuth)',desc:'Google + GitHub OAuth, anonymous session support with upgrade prompt'},
+    {name:'Meme history',desc:'Personal gallery per user — saved, shareable, searchable by topic'},
+    {name:'One-click social sharing',desc:'Share button per meme → auto-opens Twitter/X, Reddit, WhatsApp with OG preview'},
+    {name:'OG image generation',desc:'Dynamic /og?id= endpoint returns a meta-ready image for unfurling in chat apps'},
+    {name:'Public meme pages',desc:'/meme/[id] — shareable permalink with proper title, description, og:image tags'},
+    {name:'Trending topics sidebar',desc:'Real-time trending using NewsAPI or Reddit API to suggest meme-worthy topics'}
+  ]},
+  p3:{title:'Phase 3 — Traffic & monetisation',feats:[
+    {name:'Public REST API',desc:'POST /api/generate with API key auth — rate limited by tier, docs via Swagger UI'},
+    {name:'Embeddable widget',desc:'<script> embed tag — developers drop MemeGPT into any site in 2 lines'},
+    {name:'Developer portal',desc:'API key management, usage dashboard, code examples in Python / JS / cURL'},
+    {name:'Stripe integration',desc:'Free tier (5/day) → Pro ($9/mo, unlimited) → API tier ($29/mo)'},
+    {name:'Public meme gallery',desc:'Trending / recent / top memes feed — SEO goldmine, social proof, loop-back traffic'},
+    {name:'Analytics dashboard',desc:'Internal: top topics, template usage, share rates, conversion funnel'}
+  ]}
+};
+let current='p1';
+function selectPhase(p){
+  document.querySelectorAll('.phase-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('card-'+p).classList.add('active');
+  current=p;
+  const ph=phases[p];
+  document.getElementById('dp-title').textContent=ph.title;
+  document.getElementById('dp-feats').innerHTML=ph.feats.map(f=>`<div class="feat-item"><div class="feat-name">${f.name}</div><div class="feat-desc">${f.desc}</div></div>`).join('');
+}
+selectPhase('p1');
+</script>

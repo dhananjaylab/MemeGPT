@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: memegpt-postgres
+    environment:
+      POSTGRES_DB: memegpt
+      POSTGRES_USER: memegpt
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memegpt -d memegpt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and job queue
+  redis:
+    image: redis:7-alpine
+    container_name: memegpt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: memegpt-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://memegpt:password@postgres:5432/memegpt
+      - REDIS_URL=redis://redis:6379/0
+      - ARQ_REDIS_SETTINGS=redis://redis:6379/1
+      - FRONTEND_URL=http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./templates:/app/templates:ro
+      - ./fonts:/app/fonts:ro
+      - ./meme_data.json:/app/meme_data.json:ro
+      - ./backend:/app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ARQ Worker for background jobs
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: memegpt-worker
+    command: python run_worker.py
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://memegpt:password@postgres:5432/memegpt
+      - REDIS_URL=redis://redis:6379/0
+      - ARQ_REDIS_SETTINGS=redis://redis:6379/1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - R2_ACCESS_KEY=${R2_ACCESS_KEY}
+      - R2_SECRET_KEY=${R2_SECRET_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+    volumes:
+      - ./templates:/app/templates:ro
+      - ./fonts:/app/fonts:ro
+      - ./meme_data.json:/app/meme_data.json:ro
+      - ./backend:/app/backend
+      - ./run_worker.py:/app/run_worker.py:ro
+      - ./output:/app/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r = redis.Redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend (for development)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: memegpt-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: memegpt-network

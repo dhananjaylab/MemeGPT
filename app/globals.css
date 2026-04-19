@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+:root {
+  --background: 0 0% 8%;
+  --foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 64%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --ring: 0 0% 83%;
+  
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --font-display: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-family: var(--font-inter);
+}
+
+/* Custom component classes */
+@layer components {
+  .btn-acid {
+    @apply bg-acid text-black font-medium px-4 py-2 rounded-lg hover:bg-acid/90 transition-colors duration-200 flex items-center gap-2;
+  }
+  
+  .btn-ghost {
+    @apply bg-transparent border border-border text-secondary hover:text-primary hover:border-border/60 px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2;
+  }
+  
+  .card-dark {
+    @apply bg-surface border border-border rounded-xl p-4;
+  }
+  
+  .input-dark {
+    @apply bg-surface border border-border rounded-lg px-3 py-2 text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-acid/20 focus:border-acid/40 transition-colors;
+  }
+  
+  .badge-acid {
+    @apply bg-acid text-black text-xs font-medium px-2 py-1 rounded-md;
+  }
+  
+  .badge-dim {
+    @apply bg-surface-2 text-muted text-xs font-medium px-2 py-1 rounded-md;
+  }
+  
+  .text-primary {
+    @apply text-foreground;
+  }
+  
+  .text-secondary {
+    @apply text-muted-foreground;
+  }
+  
+  .text-muted {
+    @apply text-muted-foreground/70;
+  }
+  
+  .border-border-light {
+    @apply border-border/60;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted));
+}
+
+/* Loading animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
