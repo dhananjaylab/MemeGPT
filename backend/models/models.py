@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, F
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from db.session import Base
+from ..db.session import Base
 
 
 class User(Base):
@@ -18,6 +18,7 @@ class User(Base):
     api_key: Optional[str] = Column(String, nullable=True, unique=True, index=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    preferences: dict = Column(JSON, default={}, nullable=False)
     
     # Relationships
     memes = relationship("GeneratedMeme", back_populates="user", cascade="all, delete-orphan")

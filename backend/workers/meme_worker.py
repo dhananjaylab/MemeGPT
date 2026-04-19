@@ -18,11 +18,10 @@ from ..services.meme_ai import generate_meme_captions
 from ..services.compositor import overlay_text_on_image
 from ..services.storage import upload_to_r2
 
+from ..services.worker import get_arq_pool, close_arq_pool
+
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Redis settings for ARQ
-redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
 async def update_job_status(
     job_id: str, 
@@ -56,7 +55,7 @@ async def update_job_status(
         return False
 
 async def get_template_by_id(db: AsyncSession, template_id: int) -> Optional[Dict[str, Any]]:
-    """Get meme template from DB or fallback to JSON"""
+    """Get meme template from DB"""
     result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
     template = result.scalar_one_or_none()
     if template:
@@ -85,8 +84,6 @@ async def process_meme_generation(ctx: Dict[str, Any], job_id: str, user_id: Opt
             return {"status": "failed"}
 
         meme_ids = []
-        generated_results = []
-
         async with AsyncSessionLocal() as db:
             for ai_meme in captions:
                 try:
@@ -120,10 +117,6 @@ async def process_meme_generation(ctx: Dict[str, Any], job_id: str, user_id: Opt
                     )
                     db.add(new_meme)
                     meme_ids.append(meme_id)
-                    generated_results.append({
-                        "id": meme_id,
-                        "url": image_url
-                    })
                 except Exception as e:
                     logger.error(f"Error in single meme processing: {e}")
             await db.commit()
@@ -139,73 +132,10 @@ async def process_meme_generation(ctx: Dict[str, Any], job_id: str, user_id: Opt
         logger.error(f"Job {job_id} failed: {e}")
         await update_job_status(job_id, "failed", error_message=str(e))
         return {"status": "failed"}
-async def enqueue_meme_generation(prompt: str, user: Optional[User] = None) -> str:
-    """Enqueue a meme generation job with improved error handling"""
-    job_id = str(uuid4())
-    user_id = user.id if user else None
-    
-    logger.info(f"Enqueueing meme generation job {job_id} for user {user_id}")
-    
-    try:
-        # Create job record in database
-        async with AsyncSessionLocal() as db:
-            job = MemeJob(
-                id=job_id,
-                user_id=user_id,
-                prompt=prompt,
-                status="pending"
-            )
-            db.add(job)
-            await db.commit()
-            logger.info(f"Job {job_id} created in database")
-        
-        # Enqueue job with ARQ
-        pool = await get_arq_pool()
-        await pool.enqueue_job(
-            'process_meme_generation',
-            job_id,
-            user_id,
-            prompt,
-            _job_timeout=300,  # 5 minutes timeout
-            _defer_until=None,  # Process immediately
-        )
-        
-        logger.info(f"Job {job_id} enqueued successfully")
-        return job_id
-        
-    except Exception as e:
-        logger.error(f"Error enqueueing job {job_id}: {e}")
-        raise Exception(f"Failed to enqueue job: {str(e)}")
-
-# Global ARQ pool for reuse
-_arq_pool: Optional[ArqRedis] = None
-
-async def get_arq_pool() -> ArqRedis:
-    """Get ARQ Redis pool with connection reuse"""
-    global _arq_pool
-    
-    if _arq_pool is None:
-        try:
-            _arq_pool = await create_pool(redis_settings)
-            logger.info("ARQ Redis pool created successfully")
-        except Exception as e:
-            logger.error(f"Failed to create ARQ Redis pool: {e}")
-            raise
-    
-    return _arq_pool
-
-async def close_arq_pool():
-    """Close ARQ Redis pool"""
-    global _arq_pool
-    
-    if _arq_pool:
-        await _arq_pool.close()
-        _arq_pool = None
-        logger.info("ARQ Redis pool closed")
 
 class WorkerSettings:
     functions = [process_meme_generation]
-    redis_settings = redis_settings
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
     queue_name = 'meme_generation'
     
     @staticmethod
@@ -215,3 +145,4 @@ class WorkerSettings:
     @staticmethod
     async def shutdown(ctx):
         logger.info("Worker shutting down")
+        await close_arq_pool()
