@@ -18,10 +18,10 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.config import settings
-from ..db.session import get_db
-from ..models.models import User
-from ..services.auth import get_current_user
+from core.config import settings
+from db.session import get_db
+from models.models import User
+from services.auth import get_current_user
 
 stripe.api_key = settings.stripe_secret_key
 WEBHOOK_SECRET = settings.stripe_webhook_secret

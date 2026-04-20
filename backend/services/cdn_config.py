@@ -6,7 +6,7 @@ import boto3
 import logging
 from typing import Dict, Optional, List
 from enum import Enum
-from ..core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -8,8 +8,8 @@ import io
 import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from ..core.config import settings
-from .cdn_config import CDNManager
+from core.config import settings
+from services.cdn_config import CDNManager
 
 logger = logging.getLogger(__name__)
 

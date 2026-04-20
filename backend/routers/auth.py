@@ -4,9 +4,9 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
 
-from ..db.session import get_db
-from ..models.models import User
-from ..services.auth import (
+from db.session import get_db
+from models.models import User
+from services.auth import (
     get_current_user_optional,
     get_user_by_email,
     create_user,

@@ -6,9 +6,9 @@ from sqlalchemy import select
 import jwt
 from datetime import datetime, timedelta
 
-from ..core.config import settings
-from ..db.session import get_db
-from ..models.models import User
+from core.config import settings
+from db.session import get_db
+from models.models import User
 
 security = HTTPBearer(auto_error=False)
 

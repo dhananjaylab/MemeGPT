@@ -24,10 +24,10 @@ from typing import List, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from ..db.session import engine, AsyncSessionLocal
-from ..models.models import MemeTemplate
-from ..services.storage import upload_to_r2
-from ..core.config import settings
+from db.session import engine, AsyncSessionLocal
+from models.models import MemeTemplate
+from services.storage import upload_to_r2
+from core.config import settings
 
 # Paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent

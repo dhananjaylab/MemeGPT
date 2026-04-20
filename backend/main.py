@@ -1,12 +1,18 @@
 from contextlib import asynccontextmanager
+import sys
+import os
+
+# Ensure backend directory is on Python path for uvicorn imports
+sys.path.insert(0, os.path.dirname(__file__))
+
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
-from .routers import memes, jobs, trending, auth, stripe as stripe_router, users, health
-from .db.session import engine, Base
-from .core.config import settings
-from .core.middleware import register_middleware
-from .core.cors import setup_cors_middleware
+from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health
+from db.session import engine, Base
+from core.config import settings
+from core.middleware import register_middleware
+from core.cors import setup_cors_middleware
 
 
 @asynccontextmanager
@@ -16,7 +22,7 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     yield
     # Cleanup on shutdown
-    from .routers.health import cleanup_health_checker
+    from routers.health import cleanup_health_checker
     await cleanup_health_checker()
 
 

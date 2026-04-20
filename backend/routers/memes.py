@@ -4,11 +4,11 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
-from ..db.session import get_db
-from ..models.models import GeneratedMeme, User
-from ..services.auth import get_current_user_optional
-from ..services.rate_limit import rate_limit_request
-from ..workers.meme_worker import enqueue_meme_generation
+from db.session import get_db
+from models.models import GeneratedMeme, User
+from services.auth import get_current_user_optional
+from services.rate_limit import rate_limit_request
+from workers.meme_worker import enqueue_meme_generation
 
 router = APIRouter()
 

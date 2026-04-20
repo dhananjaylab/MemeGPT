@@ -5,9 +5,9 @@ import time
 import logging
 from typing import Optional
 
-from ..services.rate_limit import rate_limit_request
-from ..services.auth import verify_token
-from ..core.config import settings
+from services.rate_limit import rate_limit_request
+from services.auth import verify_token
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

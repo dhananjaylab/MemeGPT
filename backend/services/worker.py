@@ -6,9 +6,9 @@ from sqlalchemy import select, delete, and_, func
 from arq import create_pool, ArqRedis
 from arq.connections import RedisSettings
 
-from ..core.config import settings
-from ..db.session import AsyncSessionLocal
-from ..models.models import MemeJob, GeneratedMeme, User
+from core.config import settings
+from db.session import AsyncSessionLocal
+from models.models import MemeJob, GeneratedMeme, User
 
 # Configure logging
 logger = logging.getLogger(__name__)

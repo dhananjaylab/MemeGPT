@@ -11,14 +11,14 @@ from sqlalchemy import select, update, func
 from sqlalchemy.exc import SQLAlchemyError
 from pathlib import Path
 
-from ..core.config import settings
-from ..db.session import AsyncSessionLocal
-from ..models.models import MemeJob, GeneratedMeme, User, MemeTemplate
-from ..services.meme_ai import generate_meme_captions
-from ..services.compositor import overlay_text_on_image
-from ..services.storage import upload_to_r2
+from core.config import settings
+from db.session import AsyncSessionLocal
+from models.models import MemeJob, GeneratedMeme, User, MemeTemplate
+from services.meme_ai import generate_meme_captions
+from services.compositor import overlay_text_on_image
+from services.storage import upload_to_r2
 
-from ..services.worker import get_arq_pool, close_arq_pool
+from services.worker import get_arq_pool, close_arq_pool
 
 # Configure logging
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
 import json
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
-from ..core.config import settings
+from core.config import settings
 from pathlib import Path
 
 # Initialize OpenAI client

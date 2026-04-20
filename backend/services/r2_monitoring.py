@@ -11,7 +11,7 @@ from dataclasses import dataclass, asdict
 import boto3
 from botocore.exceptions import ClientError
 
-from ..core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

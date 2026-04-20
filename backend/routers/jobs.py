@@ -2,9 +2,9 @@ from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from ..services.worker import get_job_status, get_queue_stats, cleanup_old_jobs
-from ..services.auth import get_current_user_optional
-from ..models.models import User
+from services.worker import get_job_status, get_queue_stats, cleanup_old_jobs
+from services.auth import get_current_user_optional
+from models.models import User
 
 router = APIRouter()
 

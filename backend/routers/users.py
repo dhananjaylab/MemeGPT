@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import uuid4
 
-from ..db.session import get_db
-from ..models.models import User, GeneratedMeme
-from ..services.auth import get_current_user
+from db.session import get_db
+from models.models import User, GeneratedMeme
+from services.auth import get_current_user
 
 router = APIRouter()
 

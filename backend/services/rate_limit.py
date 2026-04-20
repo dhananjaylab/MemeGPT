@@ -15,8 +15,8 @@ from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..core.config import settings
-from ..models.models import User
+from core.config import settings
+from models.models import User
 
 _redis: Optional[aioredis.Redis] = None
 

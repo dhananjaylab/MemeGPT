@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from datetime import datetime, timedelta
 
-from ..db.session import get_db
-from ..models.models import GeneratedMeme
-from ..routers.memes import MemeResponse
+from db.session import get_db
+from models.models import GeneratedMeme
+from routers.memes import MemeResponse
 
 router = APIRouter()
 

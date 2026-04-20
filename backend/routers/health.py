@@ -21,9 +21,9 @@ from sqlalchemy.exc import SQLAlchemyError
 import redis.asyncio as redis
 from openai import AsyncOpenAI
 
-from ..core.config import settings
-from ..db.session import AsyncSessionLocal, engine
-from ..services.worker import get_arq_pool, get_queue_stats
+from core.config import settings
+from db.session import AsyncSessionLocal, engine
+from services.worker import get_arq_pool, get_queue_stats
 
 router = APIRouter()
 

@@ -9,9 +9,9 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.session import AsyncSessionLocal, engine
-from ..models.models import User, GeneratedMeme, MemeJob
-from ..core.config import settings
+from db.session import AsyncSessionLocal, engine
+from models.models import User, GeneratedMeme, MemeJob
+from core.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
