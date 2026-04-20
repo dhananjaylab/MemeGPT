@@ -24,18 +24,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = "DENY" if settings.is_production else "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         
-        # Add CSP header for production
-        if settings.is_production:
+        # Add CSP header - Allow CDN for Swagger UI docs
+        # Don't apply strict CSP to docs/redoc endpoints
+        if not request.url.path.startswith("/docs") and not request.url.path.startswith("/redoc"):
             csp_policy = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
                 "img-src 'self' data: https:; "
-                "font-src 'self' data:; "
+                "font-src 'self' data: https://cdn.jsdelivr.net; "
                 "connect-src 'self' https:; "
                 "frame-ancestors 'none';"
             )
