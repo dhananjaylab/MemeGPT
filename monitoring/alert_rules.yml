@@ -1,0 +1,142 @@
+# Prometheus Alert Rules for MemeGPT
+# Defines alerts for critical metrics
+
+groups:
+  - name: memegpt_alerts
+    interval: 30s
+    rules:
+      # Backend alerts
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: backend
+        annotations:
+          summary: "Backend service is down"
+          description: "Backend service has been unreachable for 2 minutes"
+
+      - alert: HighBackendErrorRate
+        expr: rate(http_requests_total{job="backend",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Backend error rate is above 5% (current: {{ $value | humanizePercentage }})"
+
+      - alert: BackendResponseTimeHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: backend
+        annotations:
+          summary: "High response times detected"
+          description: "95th percentile response time is above 5 seconds (current: {{ $value }}s)"
+
+      # Database alerts
+      - alert: DatabaseDown
+        expr: pg_up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database has been unreachable for 2 minutes"
+
+      - alert: DatabaseConnectionHigh
+        expr: pg_stat_activity_count / pg_setting_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High database connection usage"
+          description: "Database is using more than 80% of max connections"
+
+      - alert: DatabaseSlowQueries
+        expr: rate(pg_stat_statements_mean_time[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average query time is above 1 second"
+
+      # Redis alerts
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis server is down"
+          description: "Redis has been unreachable for 2 minutes"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis is using more than 90% of max memory"
+
+      - alert: RedisEvictions
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "High Redis eviction rate"
+          description: "Redis is evicting more than 100 keys per second"
+
+      # Meme generation job alerts
+      - alert: MemeGenerationQueueBacklog
+        expr: arq_job_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: jobs
+        annotations:
+          summary: "Meme generation queue backlog"
+          description: "Job queue has more than 1000 pending jobs"
+
+      - alert: MemeGenerationFailureRate
+        expr: rate(arq_job_failed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: jobs
+        annotations:
+          summary: "High meme generation failure rate"
+          description: "Failure rate is above 10% (current: {{ $value | humanizePercentage }})"
+
+      # Storage alerts
+      - alert: DiskSpaceRunningOut
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Low disk space"
+          description: "Less than 15% disk space available"
+
+      # Rate limiting alerts
+      - alert: RateLimitExceeded
+        expr: rate_limit_exceeded_total > 100
+        for: 5m
+        labels:
+          severity: info
+          component: ratelimit
+        annotations:
+          summary: "High rate limit violations"
+          description: "More than 100 rate limit violations per second"

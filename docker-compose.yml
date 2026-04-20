@@ -1,14 +1,23 @@
 version: '3.8'
 
+# ──────────────────────────────────────────────────────────────────────
+# MemeGPT Docker Compose Configuration
+# Includes PostgreSQL, Redis, FastAPI Backend, and ARQ Worker
+# ──────────────────────────────────────────────────────────────────────
+
 services:
+  # ─────────────────────────────────────────────────────────────────
   # PostgreSQL Database
+  # ─────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     container_name: memegpt-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: memegpt
       POSTGRES_USER: memegpt
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
       - "5432:5432"
     volumes:
@@ -19,33 +28,86 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Redis for caching and job queue
+  # ─────────────────────────────────────────────────────────────────
+  # Redis Cache and Job Queue
+  # ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: memegpt-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # ─────────────────────────────────────────────────────────────────
   # FastAPI Backend
+  # ─────────────────────────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: memegpt-backend
+    restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+asyncpg://memegpt:password@postgres:5432/memegpt
-      - REDIS_URL=redis://redis:6379/0
-      - ARQ_REDIS_SETTINGS=redis://redis:6379/1
-      - FRONTEND_URL=http://localhost:3000
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://memegpt:${DB_PASSWORD:-password}@postgres:5432/memegpt
+      - DATABASE_POOL_SIZE=20
+      - DATABASE_MAX_OVERFLOW=10
+      # Redis and Jobs
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - ARQ_REDIS_SETTINGS=redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      # Frontend
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      # AI Services
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Cloudflare R2
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      # Stripe
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      # Monitoring
+      - SENTRY_DSN=${SENTRY_DSN}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8000:8000"
     volumes:
@@ -53,77 +115,186 @@ services:
       - ./fonts:/app/fonts:ro
       - ./meme_data.json:/app/meme_data.json:ro
       - ./backend:/app/backend
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-
-  # ARQ Worker for background jobs
-  worker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: memegpt-worker
-    command: python run_worker.py
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://memegpt:password@postgres:5432/memegpt
-      - REDIS_URL=redis://redis:6379/0
-      - ARQ_REDIS_SETTINGS=redis://redis:6379/1
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - R2_ACCESS_KEY=${R2_ACCESS_KEY}
-      - R2_SECRET_KEY=${R2_SECRET_KEY}
-      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
-      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
-      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
-    volumes:
-      - ./templates:/app/templates:ro
-      - ./fonts:/app/fonts:ro
-      - ./meme_data.json:/app/meme_data.json:ro
-      - ./backend:/app/backend
-      - ./run_worker.py:/app/run_worker.py:ro
       - ./output:/app/output
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis; r = redis.Redis.from_url('redis://redis:6379/0'); r.ping()"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      - "com.memegpt.component=backend"
+
+  # ─────────────────────────────────────────────────────────────────
+  # ARQ Worker for Background Jobs
+  # ─────────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: memegpt-worker
+    restart: unless-stopped
+    command: python -m arq backend.workers.meme_worker.settings --burst
+    environment:
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://memegpt:${DB_PASSWORD:-password}@postgres:5432/memegpt
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - ARQ_REDIS_SETTINGS=redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      # AI Services
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Cloudflare R2
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+      # Monitoring
+      - SENTRY_DSN=${SENTRY_DSN}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./templates:/app/templates:ro
+      - ./fonts:/app/fonts:ro
+      - ./meme_data.json:/app/meme_data.json:ro
+      - ./backend:/app/backend
+      - ./output:/app/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      - "com.memegpt.component=worker"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r = redis.Redis.from_url('redis://:${REDIS_PASSWORD:-}@redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Frontend (Optional - for development)
+  # ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: memegpt-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_ENV=${ENVIRONMENT:-development}
+    depends_on:
+      - backend
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Next.js Frontend (for development)
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: memegpt-frontend
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_APP_URL=http://localhost:3000
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      - backend
+  # ─────────────────────────────────────────────────────────────────
+  # Prometheus (Optional - for monitoring)
+  # ─────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: memegpt-prometheus
     restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - memegpt-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - monitoring
 
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana (Optional - for visualization)
+  # ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: memegpt-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - memegpt-network
+    depends_on:
+      - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - monitoring
+
+# ──────────────────────────────────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
+# ──────────────────────────────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────────────────────────────
 networks:
-  default:
-    name: memegpt-network
+  memegpt-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

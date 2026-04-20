@@ -7,6 +7,7 @@ from typing import Optional
 
 from ..services.rate_limit import rate_limit_request
 from ..services.auth import verify_token
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -66,5 +67,53 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 def register_middleware(app: FastAPI):
     """Register all middleware for the FastAPI app"""
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RateLimitMiddleware)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to add security headers to all responses.
+    Protects against common web vulnerabilities.
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        # Enable XSS protection
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        
+        # Clickjacking protection
+        response.headers["X-Frame-Options"] = "DENY" if settings.is_production else "SAMEORIGIN"
+        
+        # HTTPS security
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        
+        # Content Security Policy
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https:; "
+            "media-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        
+        # Referrer policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # Disable caching for sensitive responses
+        if request.method == "POST" or "/auth/" in request.url.path:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        
+        return response
