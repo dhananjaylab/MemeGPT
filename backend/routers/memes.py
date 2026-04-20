@@ -8,7 +8,8 @@ from db.session import get_db
 from models.models import GeneratedMeme, User
 from services.auth import get_current_user_optional
 from services.rate_limit import rate_limit_request
-from workers.meme_worker import enqueue_meme_generation
+from workers.meme_worker import process_meme_generation
+from services.worker import enqueue_meme_generation
 
 router = APIRouter()
 

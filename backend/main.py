@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health
-from db.session import engine, Base
+from db.session import Base
 from core.config import settings
 from core.middleware import register_middleware
 from core.cors import setup_cors_middleware
@@ -17,6 +17,13 @@ from core.cors import setup_cors_middleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize database engine
+    from db.session import _init_engine
+    _init_engine()
+    
+    # Import engine after initialization
+    from db.session import engine
+    
     # Create tables on startup (use Alembic in production)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
