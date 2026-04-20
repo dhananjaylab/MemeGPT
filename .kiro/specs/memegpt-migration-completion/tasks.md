@@ -139,8 +139,8 @@
 ## 6. Documentation and Deployment
 
 ### 6.1 Documentation
-- [ ] 6.1.1 Update README with new setup instructions
-- [ ] 6.1.2 Create API documentation for developers
+- [x] 6.1.1 Update README with new setup instructions
+- [x] 6.1.2 Create API documentation for developers
 - [ ] 6.1.3 Document migration process and rollback procedures
 - [ ] 6.1.4 Create user guide for new features
 - [ ] 6.1.5 Document deployment and maintenance procedures
