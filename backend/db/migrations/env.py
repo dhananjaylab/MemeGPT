@@ -1,25 +1,40 @@
-import asyncio
-from logging.config import fileConfig
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-from alembic import context
 import os
 import sys
+import re
+from logging.config import fileConfig
+from sqlalchemy import pool, create_engine
+from sqlalchemy.engine import Connection
+from alembic import context
 
 # Add the parent directory to the path so we can import our models
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+# Load .env file if it exists
+from dotenv import load_dotenv
+# env.py is at: backend/db/migrations/env.py
+# .env is at: backend/.env
+# So we need to go up 3 levels: migrations -> db -> backend
+env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+load_dotenv(env_file, override=True)
+
+# Get database URL from environment or use default
+database_url = os.getenv(
+    "DATABASE_URL", 
+    "postgresql+psycopg2://user:password@localhost/memegpt"
+)
+
+# Convert postgresql:// to postgresql+psycopg2://
+database_url = re.sub(r'^postgresql:', 'postgresql+psycopg2:', database_url)
+
 from db.session import Base
 from models.models import User, GeneratedMeme, MemeJob, MemeTemplate
-from core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Set the database URL directly
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -53,6 +68,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        as_sql=True,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -67,28 +83,21 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 
-async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
-
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
-
-
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
-
-    asyncio.run(run_async_migrations())
+    """Run migrations in 'online' mode with psycopg driver."""
+    try:
+        # Create a sync engine with psycopg
+        connectable = create_engine(database_url, poolclass=pool.NullPool)
+        
+        with connectable.connect() as connection:
+            do_run_migrations(connection)
+        
+        connectable.dispose()
+    except Exception as e:
+        print(f"\n⚠️  Could not connect to database: {str(e)}")
+        print("\nFalling back to offline migration mode (SQL will be generated but not executed).")
+        print("To apply migrations, ensure the database is accessible and run: alembic upgrade head\n")
+        run_migrations_offline()
 
 
 if context.is_offline_mode():

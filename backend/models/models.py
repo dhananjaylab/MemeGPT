@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, F
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from ..db.session import Base
+from db.session import Base
 
 
 class User(Base):
