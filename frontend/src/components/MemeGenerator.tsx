@@ -114,122 +114,200 @@ export function MemeGenerator() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Input Section */}
-      <div className="card-dark p-6">
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="prompt" className="block text-sm font-medium text-primary mb-2">
-              What's on your mind? 🤔
-            </label>
-            <textarea
-              id="prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Enter a topic, situation, or story... (e.g., 'When you realize it's Monday morning')"
-              aria-label="Meme generation prompt"
-              className="input-dark w-full h-32 resize-none"
-              disabled={isGenerating}
-            />
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <Sparkles size={12} />
-              <span>Tip: Be specific for better results</span>
+    <div className="space-y-12">
+      {/* Input Section - Enhanced Design */}
+      <div className="relative">
+        {/* Background Glow Effect */}
+        <div className="absolute inset-0 bg-gradient-to-r from-acid/5 via-purple-500/5 to-blue-500/5 rounded-3xl blur-xl"></div>
+        
+        <div className="relative glass-card border-2 border-acid/20 p-8">
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-acid/10 border border-acid/30 text-acid text-sm font-bold">
+                <Sparkles size={16} className="animate-pulse" />
+                AI Meme Generator
+              </div>
+              <h2 className="font-display text-2xl font-bold text-white">
+                What's your vibe today?
+              </h2>
+              <p className="text-secondary text-sm">
+                Describe any situation, feeling, or random thought - our AI will turn it into hilarious memes
+              </p>
+            </div>
+
+            {/* Enhanced Input */}
+            <div className="space-y-4">
+              <div className="relative">
+                <textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Try: 'When you finally understand a programming concept' or 'Monday morning energy' or 'That feeling when your code works on the first try'..."
+                  aria-label="Meme generation prompt"
+                  className="w-full h-40 bg-surface/50 backdrop-blur-sm border-2 border-border hover:border-acid/40 focus:border-acid/60 rounded-2xl px-6 py-4 text-primary placeholder:text-muted/70 focus:outline-none transition-all duration-300 resize-none text-lg leading-relaxed"
+                  disabled={isGenerating}
+                />
+                <div className="absolute bottom-4 right-4 text-xs text-muted">
+                  {prompt.length}/1000
+                </div>
+              </div>
+
+              {/* Quick Suggestions */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs text-muted font-medium">Quick ideas:</span>
+                {['Monday vibes', 'Coding life', 'Weekend plans', 'Coffee addiction'].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setPrompt(suggestion)}
+                    disabled={isGenerating}
+                    className="px-3 py-1 text-xs bg-surface-2 hover:bg-surface-3 border border-border hover:border-acid/40 rounded-full text-secondary hover:text-primary transition-all duration-200"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
             
-            <div className="flex items-center gap-2">
-              {memes.length > 0 && (
-                <button
-                  onClick={clearMemes}
-                  className="btn-ghost text-xs"
-                  disabled={isGenerating}
-                  aria-label="Clear all current results"
-                >
-                  <RefreshCw size={14} />
-                  Clear
-                </button>
-              )}
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !prompt.trim()}
-                className="btn-acid"
-                aria-busy={isGenerating}
-                aria-label={isGenerating ? "Generating memes" : "Generate memes"}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 size={16} />
-                    Generate Memes
-                  </>
+            {/* Action Bar */}
+            <div className="flex items-center justify-between pt-4 border-t border-border/50">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-xs text-muted">
+                  <Sparkles size={14} className="text-acid" />
+                  <span>Pro tip: Be specific and descriptive for better results</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                {memes.length > 0 && (
+                  <button
+                    onClick={clearMemes}
+                    className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 border border-border hover:border-red-500/40 rounded-xl text-secondary hover:text-red-400 transition-all duration-200 flex items-center gap-2"
+                    disabled={isGenerating}
+                    aria-label="Clear all current results"
+                  >
+                    <RefreshCw size={16} />
+                    Clear All
+                  </button>
                 )}
-              </button>
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !prompt.trim()}
+                  className="px-8 py-3 bg-gradient-to-r from-acid to-acid/80 hover:from-acid/90 hover:to-acid/70 text-black font-bold rounded-xl transition-all duration-300 flex items-center gap-3 shadow-lg shadow-acid/20 hover:shadow-acid/30 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                  aria-busy={isGenerating}
+                  aria-label={isGenerating ? "Generating memes" : "Generate memes"}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Generating Magic...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 size={20} />
+                      Generate Memes
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+            
+            {/* Enhanced Loading State */}
+            {isGenerating && (
+              <div className="bg-gradient-to-r from-surface-2/50 to-surface-3/50 backdrop-blur-sm rounded-2xl p-6 border border-acid/20">
+                <div className="flex items-center gap-3 text-primary mb-4">
+                  <div className="w-8 h-8 bg-acid/20 rounded-full flex items-center justify-center">
+                    <Loader2 size={16} className="animate-spin text-acid" />
+                  </div>
+                  <div>
+                    <div className="font-medium">
+                      {jobId ? 'AI is crafting your memes...' : 'Starting generation...'}
+                    </div>
+                    <div className="text-sm text-secondary">
+                      This usually takes 10-30 seconds
+                    </div>
+                  </div>
+                </div>
+                <div className="relative h-2 bg-surface-3 rounded-full overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-acid/60 via-acid to-acid/60 rounded-full animate-pulse"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full animate-shimmer"></div>
+                </div>
+              </div>
+            )}
           </div>
-          
-          {isGenerating && (
-            <div className="bg-surface-2 rounded-lg p-3">
-              <div className="flex items-center gap-2 text-sm text-secondary">
-                <Loader2 size={14} className="animate-spin" />
-                <span>
-                  {jobId 
-                    ? 'AI is crafting your memes... This may take 10-30 seconds'
-                    : 'Starting generation...'
-                  }
-                </span>
-              </div>
-              <div className="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden">
-                <div className="h-full bg-acid rounded-full animate-pulse" style={{ width: '60%' }} />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Results Section */}
+      {/* Results Section - Enhanced */}
       {memes.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-xl text-primary">
-              Your Memes ({memes.length})
-            </h2>
-            <span className="badge-dim">
-              Latest first
-            </span>
+            <div className="flex items-center gap-3">
+              <h2 className="font-display text-2xl font-bold text-white">
+                Your Memes
+              </h2>
+              <div className="px-3 py-1 bg-acid/10 border border-acid/30 rounded-full">
+                <span className="text-acid font-bold text-sm">{memes.length}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="badge-dim">Latest first</span>
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {memes.map((meme, index) => (
-              <MemeCard 
+              <div 
                 key={meme.id} 
-                meme={meme} 
-                priority={index < 3}
-                showStats={false}
-              />
+                className="animate-slide-up"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <MemeCard 
+                  meme={meme} 
+                  priority={index < 3}
+                  showStats={false}
+                />
+              </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Enhanced Empty State */}
       {memes.length === 0 && !isGenerating && (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Wand2 size={24} className="text-muted" />
+        <div className="text-center py-16 space-y-6">
+          <div className="relative mx-auto w-24 h-24">
+            <div className="absolute inset-0 bg-gradient-to-r from-acid/20 to-purple-500/20 rounded-full blur-xl"></div>
+            <div className="relative w-24 h-24 bg-gradient-to-br from-surface-2 to-surface-3 rounded-full flex items-center justify-center border border-border">
+              <Wand2 size={32} className="text-acid" />
+            </div>
           </div>
-          <h3 className="font-display text-lg text-primary mb-2">
-            Ready to create some memes?
-          </h3>
-          <p className="text-secondary text-sm max-w-md mx-auto">
-            Enter any topic, situation, or story above and let our AI generate hilarious memes for you.
-          </p>
+          <div className="space-y-3">
+            <h3 className="font-display text-2xl font-bold text-white">
+              Ready to create some magic?
+            </h3>
+            <p className="text-secondary max-w-md mx-auto leading-relaxed">
+              Describe any situation, feeling, or random thought above. Our AI will transform it into hilarious, shareable memes in seconds.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 pt-4">
+            <div className="text-xs text-muted">Try something like:</div>
+            {[
+              "When you finally fix that bug",
+              "Monday morning energy",
+              "Trying to adult",
+              "Weekend vs Monday"
+            ].map((example, index) => (
+              <button
+                key={index}
+                onClick={() => setPrompt(example)}
+                className="px-3 py-1 text-xs bg-surface-2/50 hover:bg-acid/10 border border-border hover:border-acid/40 rounded-full text-secondary hover:text-acid transition-all duration-200"
+              >
+                "{example}"
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
