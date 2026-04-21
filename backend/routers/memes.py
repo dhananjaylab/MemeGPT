@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from db.session import get_db
-from models.models import GeneratedMeme, User
+from models.models import GeneratedMeme, User, MemeTemplate
 from services.auth import get_current_user_optional
 from services.rate_limit import rate_limit_request
 from workers.meme_worker import process_meme_generation
@@ -16,6 +16,7 @@ router = APIRouter()
 
 class GenerateMemeRequest(BaseModel):
     prompt: str
+    ai_provider: Optional[str] = "openai"  # "openai" or "gemini"
 
 
 class GenerateMemeResponse(BaseModel):
@@ -32,6 +33,16 @@ class MemeResponse(BaseModel):
     created_at: str
     share_count: int
     like_count: int
+
+
+class TemplateResponse(BaseModel):
+    id: int
+    name: str
+    image_url: Optional[str]
+    text_field_count: int
+    text_coordinates: List[List[int]]
+    preview_image_url: Optional[str]
+    font_path: str
 
 
 @router.post("/generate", response_model=GenerateMemeResponse)
@@ -53,8 +64,11 @@ async def generate_meme(
     if len(body.prompt) > 1000:
         raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
     
-    # Enqueue meme generation job
-    job_id = await enqueue_meme_generation(body.prompt, current_user)
+    # Normalize ai_provider
+    ai_provider = (body.ai_provider or "openai").lower()
+    
+    # Enqueue meme generation job with specified AI provider
+    job_id = await enqueue_meme_generation(body.prompt, current_user, ai_provider)
     
     return GenerateMemeResponse(
         job_id=job_id,
@@ -195,6 +209,55 @@ async def get_meme(
         created_at=meme.created_at.isoformat(),
         share_count=meme.share_count,
         like_count=meme.like_count
+    )
+
+
+# Template Management Endpoints
+
+@router.get("/templates", response_model=List[TemplateResponse])
+async def get_templates(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all available meme templates for AI suggestions and manual editor"""
+    
+    result = await db.execute(select(MemeTemplate))
+    templates = result.scalars().all()
+    
+    return [
+        TemplateResponse(
+            id=template.id,
+            name=template.name,
+            image_url=template.image_url,
+            text_field_count=template.number_of_text_fields,
+            text_coordinates=template.text_coordinates_xy_wh,
+            preview_image_url=template.image_url,  # Same as image_url for now
+            font_path=template.font_path
+        )
+        for template in templates
+    ]
+
+
+@router.get("/templates/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific meme template details"""
+    
+    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return TemplateResponse(
+        id=template.id,
+        name=template.name,
+        image_url=template.image_url,
+        text_field_count=template.number_of_text_fields,
+        text_coordinates=template.text_coordinates_xy_wh,
+        preview_image_url=template.image_url,
+        font_path=template.font_path
     )
 
 

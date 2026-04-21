@@ -1,11 +1,25 @@
 import json
+from enum import Enum
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
+import google.generativeai as genai
 from core.config import settings
 from pathlib import Path
 
+
+class AIProvider(str, Enum):
+    """Available AI providers for caption generation"""
+    OPENAI = "openai"
+    GEMINI = "gemini"
+    BOTH = "both"  # Uses both providers and combines results
+
+
 # Initialize OpenAI client
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+
+# Initialize Gemini client
+if settings.gemini_api_key:
+    genai.configure(api_key=settings.gemini_api_key)
 
 ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent
 
@@ -48,6 +62,10 @@ Example output:
 
 async def generate_meme_captions(user_prompt: str) -> Optional[List[Dict[str, Any]]]:
     """Call OpenAI GPT-4o to generate meme content"""
+    if not openai_client:
+        print("OpenAI API key not configured")
+        return None
+    
     meme_data_text = load_meme_data_from_json()
     system_message = get_system_instructions(meme_data_text)
     
@@ -71,3 +89,73 @@ async def generate_meme_captions(user_prompt: str) -> Optional[List[Dict[str, An
     except Exception as e:
         print(f"Error calling OpenAI: {e}")
         return None
+
+
+def get_gemini_system_instructions(meme_data_text: str) -> str:
+    """Generate system instructions for Gemini AI"""
+    SYSTEM_INSTRUCTIONS = f"""You are a meme-generating AI assistant. You will receive a situation or text from the user.
+
+You have access to these meme templates: {meme_data_text}
+
+Your job is to choose appropriate templates and generate meme text that matches the template structure.
+
+Output exactly 3 different meme options as a valid JSON array. Each option must have:
+- meme_id: The ID of the chosen template (integer)
+- meme_name: The name of the template (string)
+- meme_text: Array of text strings matching the template's text field count
+- reasoning: Brief explanation of why this template fits the prompt
+
+Generate creative, humorous, and fitting meme captions for the user's prompt. Follow the structure exactly."""
+    return SYSTEM_INSTRUCTIONS
+
+
+async def generate_meme_captions_with_gemini(user_prompt: str) -> Optional[List[Dict[str, Any]]]:
+    """Call Google Gemini to generate meme content"""
+    if not settings.gemini_api_key:
+        print("Gemini API key not configured")
+        return None
+    
+    meme_data_text = load_meme_data_from_json()
+    system_message = get_gemini_system_instructions(meme_data_text)
+    
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_message,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=2048,
+                temperature=1.0,
+            )
+        )
+        
+        response = model.generate_content(user_prompt)
+        
+        if not response.text:
+            return None
+        
+        # Extract JSON from response
+        data = json.loads(response.text)
+        return data.get("output", [])
+    except Exception as e:
+        print(f"Error calling Gemini: {e}")
+        return None
+
+
+async def get_caption_generator(provider: str = None):
+    """Factory function to get the appropriate caption generator"""
+    if provider is None:
+        provider = settings.ai_provider
+    
+    provider = provider.lower()
+    
+    if provider == AIProvider.GEMINI.value:
+        return generate_meme_captions_with_gemini
+    elif provider == AIProvider.OPENAI.value:
+        return generate_meme_captions
+    elif provider == AIProvider.BOTH.value:
+        # Return OpenAI as primary, but both are available
+        return generate_meme_captions
+    else:
+        # Default to OpenAI
+        return generate_meme_captions

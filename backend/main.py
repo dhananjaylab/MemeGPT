@@ -11,7 +11,7 @@ from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
-from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health
+from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health, ai
 from db.session import Base
 from core.config import settings
 from core.middleware import register_middleware
@@ -70,6 +70,7 @@ app.include_router(auth.router,          prefix="/api/auth",    tags=["auth"])
 app.include_router(memes.router,         prefix="/api/memes",   tags=["memes"])
 app.include_router(jobs.router,          prefix="/api/jobs",    tags=["jobs"])
 app.include_router(trending.router,      prefix="/api/trending",tags=["trending"])
+app.include_router(ai.router,            prefix="/api/ai",      tags=["ai"])
 app.include_router(stripe_router.router, prefix="/api/stripe",  tags=["billing"])
 app.include_router(users.router,         prefix="/api/auth",    tags=["users"])
 

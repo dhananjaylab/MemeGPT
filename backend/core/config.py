@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
     
+    # Google Gemini
+    gemini_api_key: str = ""
+    ai_provider: str = Field(default="openai", alias="AI_PROVIDER")  # "openai", "gemini", or "both"
+    
     # Frontend
     frontend_url: str = "http://localhost:3000"
     
@@ -93,6 +97,16 @@ class Settings(BaseSettings):
         if not value or not value.strip():
             return []
         return [item.strip() for item in value.split(",") if item.strip()]
+    
+    @property
+    def has_gemini(self) -> bool:
+        """Check if Gemini API key is configured"""
+        return bool(self.gemini_api_key)
+    
+    @property
+    def has_openai(self) -> bool:
+        """Check if OpenAI API key is configured"""
+        return bool(self.openai_api_key)
 
 
 settings = Settings()
