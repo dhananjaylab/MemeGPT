@@ -75,5 +75,5 @@ app.include_router(users.router,         prefix="/api/auth",    tags=["users"])
 
 # ── Static Files ──────────────────────────────────────────────────────────────
 # Mount static files for serving generated memes and assets
-app.mount("/static", StaticFiles(directory="public"), name="static")
+app.mount("/static", StaticFiles(directory="../public"), name="static")
 
