@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 
@@ -67,7 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </Link>
           </div>
           
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.DEV && (
             <div className="mt-8 p-4 bg-black/40 rounded-lg text-left overflow-auto max-w-full">
               <pre className="text-xs font-mono text-red-300">
                 {this.state.error?.stack}

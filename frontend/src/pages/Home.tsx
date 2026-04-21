@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { MemeGenerator } from '../components/MemeGenerator';
 import { TrendingTopics } from '../components/TrendingTopics';
 import { Sparkles, Zap, Shield, BarChart3 } from 'lucide-react';

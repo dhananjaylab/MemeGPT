@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   --background: #111111;
@@ -46,7 +46,6 @@ body {
   .badge-dim {
     @apply bg-surface-3 text-secondary text-[10px] uppercase tracking-wider font-mono px-2 py-0.5 rounded border border-border;
   }
-}
 
   .glass-card {
     @apply bg-surface/40 backdrop-blur-xl border border-border/50 rounded-2xl p-6 shadow-2xl;

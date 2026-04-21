@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Wand2, LayoutDashboard, Image, LogIn, LogOut, ChevronDown } from 'lucide-react';
+import { Menu, X, Wand2, LayoutDashboard, Image, LogIn, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function Header() {

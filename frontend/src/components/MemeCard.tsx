@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Share2, Download, ExternalLink, Eye, Trash2 } from 'lucide-react';
+import { Heart, Share2, Download, ExternalLink, Eye } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { ShareMenu } from './ShareMenu';
-import { GeneratedMeme } from '../lib/types';
+import type { GeneratedMeme } from '../lib/types';
 import { apiClient } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
 
 interface MemeCardProps {
   meme: GeneratedMeme;
@@ -14,7 +13,7 @@ interface MemeCardProps {
   className?: string;
 }
 
-export function MemeCard({ meme, priority = false, showStats = false, className = '' }: MemeCardProps) {
+export function MemeCard({ meme, showStats = false, className = '' }: MemeCardProps) {
   const [imageLoading, setImageLoading] = useState(true);
   const [liked, setLiked] = useState(false);
 

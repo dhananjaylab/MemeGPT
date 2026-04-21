@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Wand2, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { MemeCard } from './MemeCard';
-import { GeneratedMeme } from '../lib/types';
+import type { GeneratedMeme } from '../lib/types';
 import { generateMemes, apiClient } from '../lib/api';
 
 export function MemeGenerator() {
@@ -34,7 +34,7 @@ export function MemeGenerator() {
         pollJobStatus(result.job_id);
       } else if (result.memes) {
         // Immediate response
-        setMemes(prev => [...result.memes, ...prev]);
+        setMemes(prev => [...(result.memes || []), ...prev]);
         toast.success(`Generated ${result.memes.length} memes!`);
       }
     } catch (error: any) {
@@ -43,6 +43,11 @@ export function MemeGenerator() {
         toast.error('Daily limit reached. Upgrade to Pro for unlimited generation!', {
           duration: 5000,
           icon: '🚀'
+        });
+      } else if (error.message?.includes('fetch')) {
+        toast.error('Backend server is not running. Please start the backend first.', {
+          duration: 8000,
+          icon: '⚠️'
         });
       } else {
         toast.error(error.message || 'Failed to generate memes. Please try again.');
@@ -63,7 +68,7 @@ export function MemeGenerator() {
         const data = await apiClient.getJobStatus(id);
 
         if (data.status === 'completed' && data.result?.memes) {
-          setMemes(prev => [...data.result.memes, ...prev]);
+          setMemes(prev => [...(data.result?.memes || []), ...prev]);
           toast.success(`Generated ${data.result.memes.length} memes!`);
           setIsGenerating(false);
           setJobId(null);

@@ -1,4 +1,4 @@
-import { 
+import type { 
   GeneratedMeme, 
   GenerateMemeResponse, 
   JobStatusResponse, 
@@ -12,7 +12,7 @@ import {
   MemeStats
 } from './types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 
 class APIClient {
   private baseURL: string;

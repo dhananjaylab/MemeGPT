@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, Clock, Flame, ExternalLink } from 'lucide-react';
 import { apiClient } from '../lib/api';
-import { TrendingTopic } from '../lib/types';
+import type { TrendingTopic } from '../lib/types';
 
 
 
@@ -64,7 +64,7 @@ export function TrendingTopics() {
       </div>
 
       <div className="space-y-3">
-        {topics.slice(0, 8).map((topic, index) => (
+        {topics.slice(0, 8).map((topic) => (
           <div
             key={topic.id}
             className="group cursor-pointer p-3 rounded-lg hover:bg-surface-2 transition-colors"

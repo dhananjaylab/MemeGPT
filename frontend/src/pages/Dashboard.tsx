@@ -11,14 +11,14 @@ import type { GeneratedMeme, User } from "../lib/types";
 import { apiClient } from "../lib/api";
 
 
-interface DashboardClientProps {}
+
 
 
 async function fetchUserData(token?: string) {
   try {
     const [user, memesResponse] = await Promise.all([
       apiClient.getCurrentUser(token),
-      apiClient.getMemes({ user: "me", page: 1, limit: 40 }, token),
+      apiClient.getMemes({ user: "me", page: 1, limit: 40 }),
     ]);
 
     return { 
@@ -69,7 +69,7 @@ export function Dashboard() {
   const handleDelete = async (id: string) => {
     setDeletingId(id);
     try {
-      const res = await apiClient.deleteMeme(id, backendToken);
+      const res = await apiClient.deleteMeme(id, backendToken || undefined);
       if (res.success) {
         setMemes((prev) => prev.filter((m) => m.id !== id));
         setTotalMemes((t) => Math.max(0, t - 1));
@@ -93,7 +93,7 @@ export function Dashboard() {
       const res = await apiClient.createCheckoutSession(plan, {
         success_url: `${window.location.origin}/dashboard`,
         cancel_url: `${window.location.origin}/dashboard`,
-      }, backendToken);
+      }, backendToken || undefined);
       
       if (res.checkout_url) {
         window.location.href = res.checkout_url;
@@ -106,7 +106,7 @@ export function Dashboard() {
   const handleRotateKey = async () => {
     if (!confirm("Are you sure? Your existing key will stop working immediately.")) return;
     try {
-      const res = await apiClient.rotateApiKey(backendToken);
+      const res = await apiClient.rotateApiKey(backendToken || undefined);
       if (res.api_key && user) {
         setUser({ ...user, api_key: res.api_key });
         toast.success("API key rotated successfully!");
