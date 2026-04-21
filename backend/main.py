@@ -73,3 +73,7 @@ app.include_router(trending.router,      prefix="/api/trending",tags=["trending"
 app.include_router(stripe_router.router, prefix="/api/stripe",  tags=["billing"])
 app.include_router(users.router,         prefix="/api/auth",    tags=["users"])
 
+# ── Static Files ──────────────────────────────────────────────────────────────
+# Mount static files for serving generated memes and assets
+app.mount("/static", StaticFiles(directory="public"), name="static")
+

@@ -33,7 +33,7 @@ from core.config import settings
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 MEME_DATA_PATH = ROOT_DIR / "public" / "meme_data.json"
 FRAMES_DIR = ROOT_DIR / "public" / "frames"
-BACKUP_DIR = ROOT_DIR / "legacy" / "backups" / f"migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+BACKUP_DIR = ROOT_DIR / "public" / "backups" / f"migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
 
 async def backup_files():

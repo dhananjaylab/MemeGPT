@@ -17,7 +17,7 @@ from core.config import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Paths for legacy data (if they exist)
+# Paths for legacy data migration (one-time use)
 LEGACY_DATA_DIR = Path("legacy")
 USER_MIGRATION_FILE = LEGACY_DATA_DIR / "v1_users.json"
 HISTORY_MIGRATION_FILE = LEGACY_DATA_DIR / "v1_history.json"

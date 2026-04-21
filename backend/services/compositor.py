@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent
 IMAGE_FOLDER = ROOT_DIRECTORY / "public" / "frames"
 FONT_FOLDER = ROOT_DIRECTORY / "public" / "fonts"
-OUTPUT_FOLDER = ROOT_DIRECTORY / "legacy" / "output" # Assuming we keep legacy output for now or create a new one
+OUTPUT_FOLDER = ROOT_DIRECTORY / "public" / "output"
 LINE_HEIGHT_MULTIPLIER = 1.4
 
 def handle_text_caps(font_name: str, text: str) -> str:
