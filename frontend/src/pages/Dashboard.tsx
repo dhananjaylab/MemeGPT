@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Key, Copy, Check, Eye, EyeOff, ExternalLink,
-  Zap, Trash2, BarChart2,
+  Zap, Trash2, BarChart2, User as UserIcon, Heart, Download, Share2,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -126,6 +126,38 @@ export function Dashboard() {
 
   return (
     <div className="space-y-10">
+      {/* ── Profile Header ────────────────────────────────────────────────── */}
+      <section className="glass-card border border-border rounded-xl p-6 flex items-center gap-6">
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-acid/30 to-purple-500/30 border border-acid/50 flex items-center justify-center flex-shrink-0">
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt={user?.name} className="w-full h-full rounded-full object-cover" />
+          ) : (
+            <UserIcon size={32} className="text-acid" />
+          )}
+        </div>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold">{user?.name || user?.email.split('@')[0]}</h1>
+          <p className="text-secondary text-sm mt-1">{user?.email}</p>
+          <div className="flex items-center gap-3 mt-3">
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+              plan === 'api' ? 'bg-acid/20 text-acid border border-acid/40' :
+              plan === 'pro' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40' :
+              'bg-surface-2 text-secondary border border-border'
+            }`}>
+              {plan.toUpperCase()} Plan
+            </span>
+            <span className="text-xs text-muted font-mono">
+              Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'unknown'}
+            </span>
+          </div>
+        </div>
+        <Link
+          to="/"
+          className="px-4 py-2 btn-acid text-sm"
+        >
+          Create Meme
+        </Link>
+      </section>
       {/* ── Overview stats ─────────────────────────────────────────────────── */}
       <section id="overview">
         <SectionHeading icon={BarChart2} label="Overview" />
