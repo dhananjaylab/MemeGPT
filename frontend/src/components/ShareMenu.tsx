@@ -1,120 +1,160 @@
-import { useState, useRef, useEffect } from 'react';
-import { Share2, MessageCircle, Copy, Check } from 'lucide-react';
-import { toast } from 'react-hot-toast';
-import type { GeneratedMeme } from '../lib/types';
-import { apiClient } from '../lib/api';
+import React, { useState } from 'react';
+import { Share2, Twitter, MessageCircle, Reddit, Copy, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-interface ShareMenuProps {
-  meme: GeneratedMeme;
-  className?: string;
+export interface ShareMenuProps {
+  memeUrl: string;
+  memeTitle?: string;
+  onShare?: (platform: string) => void;
 }
 
-export function ShareMenu({ meme, className = '' }: ShareMenuProps) {
+export function ShareMenu({
+  memeUrl,
+  memeTitle = 'Check out this awesome meme!',
+  onShare,
+}: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  const memeUrl = `${window.location.origin}/meme/${meme.id}`;
-  const memeText = meme.meme_text.join(' / ');
-  
   const shareOptions = [
     {
       name: 'Twitter',
-      icon: () => (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
-        </svg>
-      ),
+      icon: Twitter,
+      color: 'hover:text-blue-400',
       action: () => {
-        const text = `Check out this hilarious meme: "${memeText}" 😂`;
-        const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(memeUrl)}&hashtags=meme,AI,funny`;
-        window.open(url, '_blank', 'width=550,height=420');
-        trackShare('twitter');
+        const text = encodeURIComponent(`${memeTitle} ${memeUrl}`);
+        window.open(
+          `https://twitter.com/intent/tweet?text=${text}`,
+          '_blank',
+          'width=550,height=420'
+        );
+        onShare?.('twitter');
       },
     },
     {
       name: 'WhatsApp',
-      icon: () => <MessageCircle size={16} />,
+      icon: MessageCircle,
+      color: 'hover:text-green-400',
       action: () => {
-        const text = `Check out this meme: ${memeText} ${memeUrl}`;
-        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        window.open(url, '_blank');
-        trackShare('whatsapp');
+        const text = encodeURIComponent(`${memeTitle}\n${memeUrl}`);
+        window.open(
+          `https://wa.me/?text=${text}`,
+          '_blank'
+        );
+        onShare?.('whatsapp');
       },
     },
     {
-      name: 'Copy Link',
-      icon: copied ? () => <Check size={16} /> : () => <Copy size={16} />,
-      action: async () => {
-        try {
-          await navigator.clipboard.writeText(memeUrl);
-          setCopied(true);
-          toast.success('Link copied to clipboard!');
-          setTimeout(() => setCopied(false), 2000);
-          trackShare('copy');
-        } catch (error) {
-          console.error('Failed to copy:', error);
-          toast.error('Failed to copy link');
-        }
+      name: 'Reddit',
+      icon: Reddit,
+      color: 'hover:text-orange-500',
+      action: () => {
+        const text = encodeURIComponent(`${memeTitle}\n${memeUrl}`);
+        window.open(
+          `https://www.reddit.com/submit?title=${encodeURIComponent(memeTitle)}&url=${memeUrl}`,
+          '_blank'
+        );
+        onShare?.('reddit');
       },
     },
   ];
 
-  const trackShare = async (platform: string) => {
+  const handleCopyLink = async () => {
     try {
-      await apiClient.shareMeme(meme.id, platform as any);
-    } catch (error) {
-      console.error('Failed to track share:', error);
+      await navigator.clipboard.writeText(memeUrl);
+      setCopied(true);
+      onShare?.('copy');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      console.error('Failed to copy link');
     }
-    setIsOpen(false);
   };
 
   return (
-    <div className={`relative ${className}`} ref={menuRef}>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className="p-2 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm transition-colors"
-        title="Share"
+    <div className="relative inline-block">
+      {/* Share Button */}
+      <motion.button
+        onClick={() => setIsOpen(!isOpen)}
+        className="btn-acid gap-2"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
       >
         <Share2 size={16} />
-      </button>
+        Share
+      </motion.button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-48 bg-surface border border-border rounded-lg shadow-lg z-50 py-2">
-          {shareOptions.map((option) => (
-            <button
-              key={option.name}
-              onClick={(e) => {
-                e.stopPropagation();
-                option.action();
-              }}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-secondary hover:text-primary hover:bg-surface-2 transition-colors"
-            >
-              <option.icon />
-              <span>{option.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Share Menu Dropdown */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full right-0 mt-2 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+          >
+            <div className="p-2">
+              {/* Social Share Options */}
+              {shareOptions.map((option, idx) => {
+                const Icon = option.icon;
+                return (
+                  <motion.button
+                    key={option.name}
+                    onClick={() => {
+                      option.action();
+                      setIsOpen(false);
+                    }}
+                    className={`w-full px-4 py-2 rounded-lg flex items-center gap-2 text-sm hover:bg-surface-2 transition-colors ${option.color}`}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                  >
+                    <Icon size={16} />
+                    {option.name}
+                  </motion.button>
+                );
+              })}
+
+              {/* Divider */}
+              <div className="h-px bg-border my-2" />
+
+              {/* Copy Link Option */}
+              <motion.button
+                onClick={handleCopyLink}
+                className="w-full px-4 py-2 rounded-lg flex items-center gap-2 text-sm hover:bg-surface-2 transition-colors text-secondary"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: shareOptions.length * 0.05 }}
+              >
+                {copied ? (
+                  <>
+                    <Check size={16} className="text-green-400" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Backdrop to close menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsOpen(false)}
+            className="fixed inset-0 z-40"
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

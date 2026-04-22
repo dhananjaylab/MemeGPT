@@ -1,203 +1,147 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, Clock, Flame, ExternalLink } from 'lucide-react';
-import { apiClient } from '../lib/api';
-import type { TrendingTopic } from '../lib/types';
+import React, { useEffect, useState } from 'react';
+import { TrendingUp, TrendingDown, ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 
+export interface TrendingTopic {
+  name: string;
+  source: string;
+  count: number;
+  trend_direction: 'up' | 'down' | 'steady';
+}
 
+export interface TrendingTopicsProps {
+  onTopicSelect?: (topic: string) => void;
+  maxItems?: number;
+  variant?: 'sidebar' | 'inline';
+}
 
-export function TrendingTopics() {
+export function TrendingTopics({
+  onTopicSelect,
+  maxItems = 8,
+  variant = 'sidebar',
+}: TrendingTopicsProps) {
   const [topics, setTopics] = useState<TrendingTopic[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch trending topics from backend
   useEffect(() => {
-    fetchTrendingTopics();
-  }, []);
+    const fetchTopics = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`/api/trending/topics?limit=${maxItems}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch trending topics: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setTopics(data.topics || []);
+      } catch (err) {
+        console.error('Error fetching trending topics:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load trending topics');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const fetchTrendingTopics = async () => {
-    try {
-      const data = await apiClient.getTrendingTopics();
-      setTopics(data.topics || []);
-    } catch (err) {
-      console.error('Error fetching trending topics:', err);
-      setError('Failed to load trending topics');
-      // Fallback to mock data for development
-      setTopics(getMockTopics());
-    } finally {
-      setLoading(false);
+    fetchTopics();
+    
+    // Refresh topics every 5 minutes
+    const interval = setInterval(fetchTopics, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [maxItems]);
+
+  const getTrendIcon = (direction: 'up' | 'down' | 'steady') => {
+    switch (direction) {
+      case 'up':
+        return <TrendingUp size={14} className="text-green-400" />;
+      case 'down':
+        return <TrendingDown size={14} className="text-red-400" />;
+      case 'steady':
+        return <div className="w-0.5 h-3.5 bg-gray-400" />;
     }
   };
 
-  const handleTopicClick = (topic: TrendingTopic) => {
-    // Trigger meme generation with this topic
-    const event = new CustomEvent('generateFromTopic', { 
-      detail: { topic: topic.title } 
-    });
-    window.dispatchEvent(event);
+  const handleTopicClick = (topicName: string) => {
+    onTopicSelect?.(topicName);
   };
 
-  if (loading) {
-    return <TrendingTopicsSkeleton />;
+  if (isLoading) {
+    return (
+      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+        <div className="flex items-center justify-center py-8">
+          <div className="w-6 h-6 border-2 border-acid border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="card-dark p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp size={16} className="text-acid" />
-          <h2 className="font-mono text-sm uppercase tracking-wider text-secondary">
-            Trending Topics
-          </h2>
-        </div>
-        <p className="text-sm text-muted">Unable to load trending topics</p>
+      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+        <p className="text-red-500 text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (topics.length === 0) {
+    return (
+      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+        <p className="text-secondary text-sm text-center py-8">No trending topics</p>
       </div>
     );
   }
 
   return (
-    <div className="card-dark p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <TrendingUp size={16} className="text-acid" />
-        <h2 className="font-mono text-sm uppercase tracking-wider text-secondary">
-          Trending Topics
-        </h2>
+    <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold flex items-center gap-2">
+          <TrendingUp size={18} className="text-acid" />
+          Trending Now
+        </h3>
       </div>
 
-      <div className="space-y-3">
-        {topics.slice(0, 8).map((topic) => (
-          <div
-            key={topic.id}
-            className="group cursor-pointer p-3 rounded-lg hover:bg-surface-2 transition-colors"
-            onClick={() => handleTopicClick(topic)}
+      <div className={variant === 'inline' ? 'grid grid-cols-2 gap-2' : 'space-y-2'}>
+        {topics.map((topic, idx) => (
+          <motion.button
+            key={`${topic.name}-${idx}`}
+            onClick={() => handleTopicClick(topic.name)}
+            className="group text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
+            whileHover={{ x: 4 }}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.05 }}
           >
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-1">
-                {topic.source === 'reddit' ? (
-                  <Flame size={14} className="text-orange-400" />
-                ) : (
-                  <Clock size={14} className="text-blue-400" />
-                )}
-              </div>
-              
+            <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-primary group-hover:text-acid transition-colors line-clamp-2">
-                  {topic.title}
+                <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
+                  {topic.name}
                 </p>
-                
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-muted capitalize">
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-xs text-muted bg-surface-3 px-1.5 py-0.5 rounded">
                     {topic.source}
                   </span>
-                  
-                  <div className="flex items-center gap-2">
-                    {topic.score && (
-                      <span className="text-xs text-muted">
-                        {topic.score > 1000 
-                          ? `${(topic.score / 1000).toFixed(1)}k` 
-                          : topic.score
-                        }
-                      </span>
-                    )}
-                    
-                    {topic.url && (
-                      <a
-                        href={topic.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-muted hover:text-primary transition-colors"
-                        title="View source"
-                      >
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
-                  </div>
+                  <span className="text-xs text-secondary">
+                    {topic.count.toLocaleString()}
+                  </span>
                 </div>
               </div>
+
+              <div className="flex items-center gap-1">
+                {getTrendIcon(topic.trend_direction)}
+                <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
+              </div>
             </div>
-          </div>
+          </motion.button>
         ))}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-border">
-        <p className="text-xs text-muted text-center">
-          Click any topic to generate memes about it
-        </p>
-      </div>
+      {/* Refresh hint */}
+      <p className="text-xs text-muted text-center mt-4 pt-3 border-t border-border">
+        Refreshes every 5 minutes
+      </p>
     </div>
   );
 }
-
-function TrendingTopicsSkeleton() {
-  return (
-    <div className="card-dark p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-4 h-4 bg-surface-2 rounded animate-pulse" />
-        <div className="h-4 bg-surface-2 rounded w-32 animate-pulse" />
-      </div>
-      
-      <div className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="p-3">
-            <div className="flex items-start gap-3">
-              <div className="w-3 h-3 bg-surface-2 rounded animate-pulse mt-1" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-surface-2 rounded animate-pulse" />
-                <div className="h-3 bg-surface-2 rounded w-3/4 animate-pulse" />
-                <div className="flex justify-between">
-                  <div className="h-3 bg-surface-2 rounded w-16 animate-pulse" />
-                  <div className="h-3 bg-surface-2 rounded w-8 animate-pulse" />
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Mock data for development/fallback
-function getMockTopics(): TrendingTopic[] {
-  return [
-    {
-      id: '1',
-      title: 'When you realize it\'s Monday morning',
-      source: 'reddit',
-      score: 15420,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      title: 'AI taking over programming jobs',
-      source: 'news',
-      score: 8930,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      title: 'Working from home vs office life',
-      source: 'reddit',
-      score: 12340,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '4',
-      title: 'Coffee addiction among developers',
-      source: 'reddit',
-      score: 9876,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '5',
-      title: 'New iPhone release reactions',
-      source: 'news',
-      score: 7654,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '6',
-      title: 'Debugging at 3 AM',
       source: 'reddit',
       score: 11234,
       created_at: new Date().toISOString(),
