@@ -1,24 +1,135 @@
-import { useState, useCallback } from 'react';
-import { Wand2, Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { Wand2, Loader2, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Zap, Edit3 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { MemeCard } from './MemeCard';
+import { MemePreview } from './MemePreview';
+import { MemeEditor } from './MemeEditor';
+import { TemplateSelector } from './TemplateSelector';
+import { TrendingTopics } from './TrendingTopics';
 import type { GeneratedMeme } from '../lib/types';
 import { generateMemes, apiClient } from '../lib/api';
 
+interface TextField {
+  id: string;
+  text: string;
+  color: string;
+  fontSize: number;
+  uppercase: boolean;
+  stroke: boolean;
+  x: number;
+  y: number;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  image_url: string;
+  text_field_count: number;
+  text_coordinates: Array<{ x: number; y: number; maxWidth: number; maxHeight: number }>;
+  preview_image_url: string;
+  font_path: string;
+}
+
+interface AISuggestion {
+  id: string;
+  template: Template;
+  captions: string[];
+}
+
 export function MemeGenerator() {
+  // Mode state
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+  
+  // Auto mode states
   const [prompt, setPrompt] = useState('');
-  const [memes, setMemes] = useState<GeneratedMeme[]>([]);
+  const [autoSuggestions, setAutoSuggestions] = useState<AISuggestion[]>([]);
+  const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  
+  // Manual mode states
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [textFields, setTextFields] = useState<TextField[]>([]);
+  const [canvasSize, setCanvasSize] = useState({ width: 600, height: 400 });
   const [isGenerating, setIsGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  
+  // Results
+  const [memes, setMemes] = useState<GeneratedMeme[]>([]);
+  const confettiRef = useRef<HTMLCanvasElement>(null);
 
-  const handleGenerate = useCallback(async () => {
+  // Handle mode switch
+  const switchToManualWithSuggestion = useCallback((suggestion: AISuggestion) => {
+    setSelectedTemplate(suggestion.template);
+    
+    // Initialize text fields from suggestion
+    const newFields: TextField[] = suggestion.template.text_coordinates.map((coord, idx) => ({
+      id: `text-${idx}`,
+      text: suggestion.captions[idx] || '',
+      color: '#FFFFFF',
+      fontSize: 32,
+      uppercase: false,
+      stroke: true,
+      x: coord.x,
+      y: coord.y,
+    }));
+    setTextFields(newFields);
+    setMode('manual');
+  }, []);
+
+  // Load AI suggestions in auto mode
+  const loadSuggestions = useCallback(async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a topic or situation');
       return;
     }
 
-    if (prompt.trim().length < 10) {
-      toast.error('Please provide more context (at least 10 characters)');
+    if (prompt.trim().length < 3) {
+      toast.error('Please provide more context');
+      return;
+    }
+
+    setIsLoadingSuggestions(true);
+    setAutoSuggestions([]);
+    setCurrentSuggestionIdx(0);
+
+    try {
+      // Call /api/ai/suggest endpoint
+      const response = await fetch('/api/ai/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load suggestions');
+      }
+
+      const data = await response.json();
+      const suggestions: AISuggestion[] = (data.options || []).map((option: any, idx: number) => ({
+        id: `suggestion-${idx}`,
+        template: option.template,
+        captions: option.captions,
+      }));
+
+      if (suggestions.length === 0) {
+        toast.error('No suggestions generated. Try a different prompt.');
+      } else {
+        setAutoSuggestions(suggestions);
+        toast.success(`Generated ${suggestions.length} suggestions!`);
+      }
+    } catch (error: any) {
+      console.error('Suggestion error:', error);
+      toast.error(error.message || 'Failed to load suggestions');
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [prompt]);
+
+  const handleGenerateMeme = useCallback(async () => {
+    if (!selectedTemplate || textFields.length === 0) {
+      toast.error('Please select a template and add text');
       return;
     }
 
@@ -26,41 +137,26 @@ export function MemeGenerator() {
     setJobId(null);
 
     try {
-      const result = await generateMemes(prompt.trim());
+      const result = await generateMemes(prompt.trim() || 'custom meme');
       
       if (result.job_id) {
         setJobId(result.job_id);
-        // Start polling for results
         pollJobStatus(result.job_id);
       } else if (result.memes) {
-        // Immediate response
         setMemes(prev => [...(result.memes || []), ...prev]);
+        triggerConfetti();
         toast.success(`Generated ${result.memes.length} memes!`);
+        setIsGenerating(false);
       }
     } catch (error: any) {
       console.error('Generation error:', error);
-      if (error.isRateLimit) {
-        toast.error('Daily limit reached. Upgrade to Pro for unlimited generation!', {
-          duration: 5000,
-          icon: '🚀'
-        });
-      } else if (error.message?.includes('fetch')) {
-        toast.error('Backend server is not running. Please start the backend first.', {
-          duration: 8000,
-          icon: '⚠️'
-        });
-      } else {
-        toast.error(error.message || 'Failed to generate memes. Please try again.');
-      }
-    } finally {
-      if (!jobId) {
-        setIsGenerating(false);
-      }
+      toast.error(error.message || 'Failed to generate memes');
+      setIsGenerating(false);
     }
-  }, [prompt, jobId]);
+  }, [selectedTemplate, textFields, prompt]);
 
   const pollJobStatus = useCallback(async (id: string) => {
-    const maxAttempts = 30; // 30 seconds max
+    const maxAttempts = 30;
     let attempts = 0;
 
     const poll = async () => {
@@ -69,6 +165,7 @@ export function MemeGenerator() {
 
         if (data.status === 'completed' && data.result?.memes) {
           setMemes(prev => [...(data.result?.memes || []), ...prev]);
+          triggerConfetti();
           toast.success(`Generated ${data.result.memes.length} memes!`);
           setIsGenerating(false);
           setJobId(null);
@@ -82,12 +179,11 @@ export function MemeGenerator() {
           return;
         }
 
-        // Continue polling if still processing
         if (data.status === 'processing' && attempts < maxAttempts) {
           attempts++;
           setTimeout(poll, 1000);
         } else if (attempts >= maxAttempts) {
-          toast.error('Generation timed out. Please try again.');
+          toast.error('Generation timed out');
           setIsGenerating(false);
           setJobId(null);
         }
@@ -102,10 +198,38 @@ export function MemeGenerator() {
     poll();
   }, []);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      handleGenerate();
+  const triggerConfetti = () => {
+    if (confettiRef.current) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#B0FF00', '#9eff00', '#00FFFF', '#FF00FF'],
+      });
     }
+  };
+
+  const handleTextUpdate = (id: string, newText: string) => {
+    setTextFields(prev =>
+      prev.map(field => (field.id === id ? { ...field, text: newText } : field))
+    );
+  };
+
+  const handleStyleUpdate = (id: string, updates: Partial<TextField>) => {
+    setTextFields(prev =>
+      prev.map(field => (field.id === id ? { ...field, ...updates } : field))
+    );
+  };
+
+  const handleTextPositionUpdate = (id: string, x: number, y: number) => {
+    setTextFields(prev =>
+      prev.map(field => (field.id === id ? { ...field, x, y } : field))
+    );
+  };
+
+  const handleTrendingTopicSelect = (topic: string) => {
+    setPrompt(topic);
+    setMode('auto');
   };
 
   const clearMemes = () => {
@@ -114,202 +238,303 @@ export function MemeGenerator() {
   };
 
   return (
-    <div className="space-y-12">
-      {/* Input Section - Enhanced Design */}
-      <div className="relative">
-        {/* Background Glow Effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-acid/5 via-purple-500/5 to-blue-500/5 rounded-3xl blur-xl"></div>
-        
-        <div className="relative glass-card border-2 border-acid/20 p-8">
-          <div className="space-y-6">
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-acid/10 border border-acid/30 text-acid text-sm font-bold">
-                <Sparkles size={16} className="animate-pulse" />
-                AI Meme Generator
-              </div>
-              <h2 className="font-display text-2xl font-bold text-white">
-                What's your vibe today?
-              </h2>
-              <p className="text-secondary text-sm">
-                Describe any situation, feeling, or random thought - our AI will turn it into hilarious memes
-              </p>
-            </div>
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      {/* Canvas for confetti */}
+      <canvas ref={confettiRef} style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none' }} />
 
-            {/* Enhanced Input */}
-            <div className="space-y-4">
-              <div className="relative">
+      {/* Main Content */}
+      <div className="lg:col-span-3 space-y-8">
+        {/* Mode Toggle */}
+        <div className="flex gap-3 bg-surface border border-border rounded-xl p-1">
+          <button
+            onClick={() => setMode('auto')}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+              mode === 'auto'
+                ? 'bg-acid text-black'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <Zap size={16} />
+            AI Synthesis
+          </button>
+          <button
+            onClick={() => setMode('manual')}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+              mode === 'manual'
+                ? 'bg-acid text-black'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <Edit3 size={16} />
+            Manual Editor
+          </button>
+        </div>
+
+        {/* Auto Synthesis Mode */}
+        <AnimatePresence mode="wait">
+          {mode === 'auto' && (
+            <motion.div
+              key="auto-mode"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {/* Input Section */}
+              <div className="glass-card border border-border p-6 rounded-xl space-y-4">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Sparkles size={18} className="text-acid" />
+                  What's your vibe?
+                </h3>
+                
                 <textarea
-                  id="prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  placeholder="Try: 'When you finally understand a programming concept' or 'Monday morning energy' or 'That feeling when your code works on the first try'..."
-                  aria-label="Meme generation prompt"
-                  className="w-full h-40 bg-surface/50 backdrop-blur-sm border-2 border-border hover:border-acid/40 focus:border-acid/60 rounded-2xl px-6 py-4 text-primary placeholder:text-muted/70 focus:outline-none transition-all duration-300 resize-none text-lg leading-relaxed"
-                  disabled={isGenerating}
+                  placeholder="Describe any situation, feeling, or random thought..."
+                  className="w-full h-32 bg-surface/50 backdrop-blur-sm border border-border hover:border-acid/40 focus:border-acid/60 rounded-lg px-4 py-3 text-primary placeholder:text-muted/70 focus:outline-none transition-all resize-none"
                 />
-                <div className="absolute bottom-4 right-4 text-xs text-muted">
-                  {prompt.length}/1000
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={loadSuggestions}
+                    disabled={isLoadingSuggestions || !prompt.trim()}
+                    className="flex-1 btn-acid gap-2 justify-center"
+                  >
+                    {isLoadingSuggestions ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={16} />
+                        Get Suggestions
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              {/* Quick Suggestions */}
-              <div className="flex flex-wrap gap-2">
-                <span className="text-xs text-muted font-medium">Quick ideas:</span>
-                {['Monday vibes', 'Coding life', 'Weekend plans', 'Coffee addiction'].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => setPrompt(suggestion)}
-                    disabled={isGenerating}
-                    className="px-3 py-1 text-xs bg-surface-2 hover:bg-surface-3 border border-border hover:border-acid/40 rounded-full text-secondary hover:text-primary transition-all duration-200"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Action Bar */}
-            <div className="flex items-center justify-between pt-4 border-t border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <Sparkles size={14} className="text-acid" />
-                  <span>Pro tip: Be specific and descriptive for better results</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                {memes.length > 0 && (
-                  <button
-                    onClick={clearMemes}
-                    className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 border border-border hover:border-red-500/40 rounded-xl text-secondary hover:text-red-400 transition-all duration-200 flex items-center gap-2"
-                    disabled={isGenerating}
-                    aria-label="Clear all current results"
-                  >
-                    <RefreshCw size={16} />
-                    Clear All
-                  </button>
-                )}
-                <button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                  className="px-8 py-3 bg-gradient-to-r from-acid to-acid/80 hover:from-acid/90 hover:to-acid/70 text-black font-bold rounded-xl transition-all duration-300 flex items-center gap-3 shadow-lg shadow-acid/20 hover:shadow-acid/30 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
-                  aria-busy={isGenerating}
-                  aria-label={isGenerating ? "Generating memes" : "Generate memes"}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      Generating Magic...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 size={20} />
-                      Generate Memes
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* Enhanced Loading State */}
-            {isGenerating && (
-              <div className="bg-gradient-to-r from-surface-2/50 to-surface-3/50 backdrop-blur-sm rounded-2xl p-6 border border-acid/20">
-                <div className="flex items-center gap-3 text-primary mb-4">
-                  <div className="w-8 h-8 bg-acid/20 rounded-full flex items-center justify-center">
-                    <Loader2 size={16} className="animate-spin text-acid" />
+              {/* Suggestions Carousel */}
+              {autoSuggestions.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Sparkles size={18} className="text-acid" />
+                    AI Suggestions ({currentSuggestionIdx + 1}/{autoSuggestions.length})
+                  </h3>
+
+                  <div className="relative">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={currentSuggestionIdx}
+                        initial={{ opacity: 0, x: 100 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -100 }}
+                        className="glass-card border border-border rounded-xl overflow-hidden"
+                      >
+                        <div className="aspect-video bg-surface overflow-hidden">
+                          <img
+                            src={autoSuggestions[currentSuggestionIdx].template.image_url}
+                            alt={autoSuggestions[currentSuggestionIdx].template.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <p className="text-sm text-muted mb-2">Template:</p>
+                            <p className="font-medium">{autoSuggestions[currentSuggestionIdx].template.name}</p>
+                          </div>
+
+                          <div>
+                            <p className="text-sm text-muted mb-2">Suggested Captions:</p>
+                            <div className="space-y-2">
+                              {autoSuggestions[currentSuggestionIdx].captions.map((caption, idx) => (
+                                <div key={idx} className="flex items-start gap-2 p-2 bg-surface-2 rounded">
+                                  <span className="text-acid font-bold">{idx + 1}.</span>
+                                  <p className="text-sm">{caption}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => switchToManualWithSuggestion(autoSuggestions[currentSuggestionIdx])}
+                            className="w-full btn-acid justify-center"
+                          >
+                            Use This & Edit
+                          </button>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+
+                    {/* Carousel Controls */}
+                    {autoSuggestions.length > 1 && (
+                      <>
+                        <button
+                          onClick={() => setCurrentSuggestionIdx(idx => (idx - 1 + autoSuggestions.length) % autoSuggestions.length)}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full transition-all"
+                        >
+                          <ChevronLeft size={20} className="text-white" />
+                        </button>
+                        <button
+                          onClick={() => setCurrentSuggestionIdx(idx => (idx + 1) % autoSuggestions.length)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full transition-all"
+                        >
+                          <ChevronRight size={20} className="text-white" />
+                        </button>
+                      </>
+                    )}
                   </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Manual Editor Mode */}
+        <AnimatePresence mode="wait">
+          {mode === 'manual' && (
+            <motion.div
+              key="manual-mode"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {/* Template Selection */}
+              {!selectedTemplate ? (
+                <div>
+                  <h3 className="font-semibold mb-4">Choose a Template</h3>
+                  <TemplateSelector
+                    onSelectTemplate={(templateId) => {
+                      // Fetch full template data
+                      fetch(`/api/memes/templates/${templateId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                          setSelectedTemplate(data);
+                          const newFields: TextField[] = data.text_coordinates.map((coord: any, idx: number) => ({
+                            id: `text-${idx}`,
+                            text: '',
+                            color: '#FFFFFF',
+                            fontSize: 32,
+                            uppercase: false,
+                            stroke: true,
+                            x: coord.x,
+                            y: coord.y,
+                          }));
+                          setTextFields(newFields);
+                        })
+                        .catch(err => {
+                          console.error('Failed to load template:', err);
+                          toast.error('Failed to load template');
+                        });
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Editor Panel */}
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">Edit Text</h3>
+                      <button
+                        onClick={() => {
+                          setSelectedTemplate(null);
+                          setTextFields([]);
+                        }}
+                        className="text-sm text-secondary hover:text-primary transition-colors"
+                      >
+                        Change Template
+                      </button>
+                    </div>
+
+                    <MemeEditor
+                      texts={textFields}
+                      onTextUpdate={handleTextUpdate}
+                      onStyleUpdate={handleStyleUpdate}
+                    />
+
+                    {/* Generate Button */}
+                    <button
+                      onClick={handleGenerateMeme}
+                      disabled={isGenerating}
+                      className="w-full btn-acid justify-center py-3"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 size={16} />
+                          Generate Meme
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Preview Panel */}
                   <div>
-                    <div className="font-medium">
-                      {jobId ? 'AI is crafting your memes...' : 'Starting generation...'}
-                    </div>
-                    <div className="text-sm text-secondary">
-                      This usually takes 10-30 seconds
-                    </div>
+                    <h3 className="font-semibold mb-4">Preview</h3>
+                    <MemePreview
+                      templateImageUrl={selectedTemplate.image_url}
+                      texts={textFields}
+                      onTextPositionUpdate={handleTextPositionUpdate}
+                      isLocked={false}
+                      canvasWidth={canvasSize.width}
+                      canvasHeight={canvasSize.height}
+                    />
                   </div>
                 </div>
-                <div className="relative h-2 bg-surface-3 rounded-full overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-acid/60 via-acid to-acid/60 rounded-full animate-pulse"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full animate-shimmer"></div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Results Section */}
+        {memes.length > 0 && (
+          <div className="space-y-6 mt-12">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Your Memes</h2>
+              <button
+                onClick={clearMemes}
+                className="px-4 py-2 text-sm bg-surface-2 hover:bg-surface-3 border border-border hover:border-red-500/40 rounded-lg text-secondary hover:text-red-400 transition-all flex items-center gap-2"
+              >
+                <RefreshCw size={16} />
+                Clear
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {memes.map((meme, idx) => (
+                <div
+                  key={meme.id}
+                  className="animate-slide-up"
+                  style={{ animationDelay: `${idx * 100}ms` }}
+                >
+                  <MemeCard meme={meme} priority={idx < 3} showStats={false} />
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Results Section - Enhanced */}
-      {memes.length > 0 && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="font-display text-2xl font-bold text-white">
-                Your Memes
-              </h2>
-              <div className="px-3 py-1 bg-acid/10 border border-acid/30 rounded-full">
-                <span className="text-acid font-bold text-sm">{memes.length}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="badge-dim">Latest first</span>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {memes.map((meme, index) => (
-              <div 
-                key={meme.id} 
-                className="animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <MemeCard 
-                  meme={meme} 
-                  priority={index < 3}
-                  showStats={false}
-                />
-              </div>
-            ))}
-          </div>
+      {/* Sidebar - Trending Topics */}
+      <div className="lg:col-span-1">
+        <div className="sticky top-6 space-y-4">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-secondary">
+            Trending Now
+          </h3>
+          <TrendingTopics
+            onTopicSelect={handleTrendingTopicSelect}
+            maxItems={6}
+            variant="sidebar"
+          />
         </div>
-      )}
-
-      {/* Enhanced Empty State */}
-      {memes.length === 0 && !isGenerating && (
-        <div className="text-center py-16 space-y-6">
-          <div className="relative mx-auto w-24 h-24">
-            <div className="absolute inset-0 bg-gradient-to-r from-acid/20 to-purple-500/20 rounded-full blur-xl"></div>
-            <div className="relative w-24 h-24 bg-gradient-to-br from-surface-2 to-surface-3 rounded-full flex items-center justify-center border border-border">
-              <Wand2 size={32} className="text-acid" />
-            </div>
-          </div>
-          <div className="space-y-3">
-            <h3 className="font-display text-2xl font-bold text-white">
-              Ready to create some magic?
-            </h3>
-            <p className="text-secondary max-w-md mx-auto leading-relaxed">
-              Describe any situation, feeling, or random thought above. Our AI will transform it into hilarious, shareable memes in seconds.
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2 pt-4">
-            <div className="text-xs text-muted">Try something like:</div>
-            {[
-              "When you finally fix that bug",
-              "Monday morning energy",
-              "Trying to adult",
-              "Weekend vs Monday"
-            ].map((example, index) => (
-              <button
-                key={index}
-                onClick={() => setPrompt(example)}
-                className="px-3 py-1 text-xs bg-surface-2/50 hover:bg-acid/10 border border-border hover:border-acid/40 rounded-full text-secondary hover:text-acid transition-all duration-200"
-              >
-                "{example}"
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
