@@ -14,7 +14,11 @@
   --muted: #52525b;
   --border: #27272a;
   --border-light: #3f3f46;
-  --acid: #9eff00;
+  --acid: #B0FF00;
+  --acid-dark: #8FCC00;
+  --glow-sm: 0 0 20px rgba(176, 255, 0, 0.15);
+  --glow-md: 0 0 40px rgba(176, 255, 0, 0.2);
+  --glow-lg: 0 0 60px rgba(176, 255, 0, 0.25);
 }
 
 body {
@@ -24,7 +28,17 @@ body {
 
 @layer components {
   .btn-acid {
-    @apply bg-acid text-black font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 flex items-center justify-center gap-2;
+    @apply bg-acid text-black font-bold px-6 py-2.5 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-lg relative overflow-hidden;
+    box-shadow: 0 0 20px rgba(176, 255, 0, 0.2);
+  }
+  
+  .btn-acid:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 4px 20px rgba(176, 255, 0, 0.4), 0 0 30px rgba(176, 255, 0, 0.2);
+  }
+
+  .btn-acid:active {
+    @apply translate-y-0;
   }
   
   .btn-ghost {
@@ -47,9 +61,36 @@ body {
     @apply bg-surface-3 text-secondary text-[10px] uppercase tracking-wider font-mono px-2 py-0.5 rounded border border-border;
   }
 
+  .badge-success {
+    @apply bg-green-500/10 text-green-400 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-green-500/20;
+  }
+
   .glass-card {
-    @apply bg-surface/30 backdrop-blur-2xl border border-border/30 rounded-3xl p-8 shadow-2xl relative;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.01) 100%);
+    @apply backdrop-blur-xl border rounded-3xl p-8 relative transition-all duration-300;
+    background: linear-gradient(135deg, rgba(26, 26, 26, 0.8) 0%, rgba(26, 26, 26, 0.6) 100%);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-card:hover {
+    @apply border-border/50;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-button {
+    @apply backdrop-blur-lg border rounded-lg px-4 py-2 transition-all duration-200 relative;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-button:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .section-gradient {
+    @apply relative;
+    background: linear-gradient(180deg, rgba(176, 255, 0, 0.03) 0%, rgba(176, 255, 0, 0.01) 50%, transparent 100%);
   }
 }
 
@@ -91,12 +132,33 @@ body {
 }
 
 @keyframes glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(158, 255, 0, 0.1); }
-  50% { box-shadow: 0 0 40px rgba(158, 255, 0, 0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(176, 255, 0, 0.15); }
+  50% { box-shadow: 0 0 40px rgba(176, 255, 0, 0.25); }
 }
 
 .animate-glow {
   animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0px rgba(176, 255, 0, 0.4); }
+  50% { box-shadow: 0 0 10px rgba(176, 255, 0, 0.2); }
+  100% { box-shadow: 0 0 0px rgba(176, 255, 0, 0.4); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes acid-shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.animate-acid-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(176, 255, 0, 0.2), transparent);
+  background-size: 1000px 100%;
+  animation: acid-shimmer 3s infinite;
 }
 
 ::-webkit-scrollbar {
