@@ -168,7 +168,7 @@ export function Dashboard() {
             { label: "Used today", value: `${used} / ${limit}` },
             { label: "Shares",     value: memes.reduce((a, m) => a + (m.share_count || 0), 0).toLocaleString() },
           ].map((s) => (
-            <div key={s.label} className="card-dark p-4 text-center">
+            <div key={s.label} className="glass-card p-4 text-center hover:border-acid/30 transition-all duration-200">
               <p className={`font-display text-2xl ${s.accent ? "text-acid" : "text-primary"}`}>
                 {s.value}
               </p>
@@ -180,15 +180,15 @@ export function Dashboard() {
         </div>
 
         {/* Daily usage bar */}
-        <div className="mt-4 card-dark p-4">
+        <div className="mt-4 glass-card p-4 border border-border/40">
           <div className="flex justify-between items-center mb-2">
             <span className="font-mono text-xs text-secondary">Daily generations</span>
             <span className="font-mono text-xs text-muted">{used} / {limit}</span>
           </div>
-          <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-background rounded-full overflow-hidden border border-border/50">
             <div
               className={`h-full rounded-full transition-all duration-700 ${
-                pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-acid"
+                pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-acid shadow-glow-md"
               }`}
               style={{ width: `${pct}%` }}
             />
@@ -218,7 +218,7 @@ export function Dashboard() {
         </div>
 
         {memes.length === 0 ? (
-          <div className="card-dark p-10 text-center">
+          <div className="glass-card p-10 text-center border border-border/40">
             <p className="font-display text-display-md text-muted mb-3">No memes yet</p>
             <Link to="/" className="btn-acid text-xs">
               Generate your first meme →
@@ -250,22 +250,22 @@ export function Dashboard() {
       {/* ── API key ────────────────────────────────────────────────────────── */}
       <section id="api">
         <SectionHeading icon={Key} label="API access" />
-        <div className="card-dark p-5">
+        <div className="glass-card p-5 border border-border/40">
           {plan === "api" && user?.api_key ? (
             <>
               <p className="font-mono text-xs text-secondary mb-3 leading-relaxed">
                 Include this key in every request as{" "}
-                <code className="text-acid">X-API-Key: your_key</code>
+                <code className="text-acid bg-background/60 px-2 py-1 rounded">X-API-Key: your_key</code>
               </p>
               <div className="flex items-center gap-2">
-                <div className="flex-1 bg-black border border-border rounded-lg px-3 py-2 font-mono text-xs text-secondary overflow-hidden">
+                <div className="flex-1 bg-background/40 border border-border/50 rounded-lg px-3 py-2 font-mono text-xs text-secondary overflow-hidden backdrop-blur-sm">
                   {keyVisible
                     ? user.api_key
                     : "mgpt_" + "•".repeat(Math.max(0, user.api_key.length - 5))}
                 </div>
                 <button
                   onClick={() => setKeyVisible((v) => !v)}
-                  className="btn-ghost p-2"
+                  className="glass-button p-2 hover:bg-acid/10 hover:text-acid transition-all duration-200"
                   title={keyVisible ? "Hide" : "Reveal"}
                   aria-label={keyVisible ? "Hide API key" : "Reveal API key"}
                 >
@@ -273,7 +273,7 @@ export function Dashboard() {
                 </button>
                 <button
                   onClick={copyKey}
-                  className="btn-ghost p-2"
+                  className="glass-button p-2 hover:bg-acid/10 hover:text-acid transition-all duration-200"
                   title="Copy"
                   aria-label="Copy API key to clipboard"
                 >
@@ -287,14 +287,14 @@ export function Dashboard() {
               <p className="font-mono text-[10px] text-muted mt-3">
                 Keep this secret. Rotate it anytime if compromised.
               </p>
-              <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-                <Link to="/api-docs" className="btn-ghost text-xs gap-1.5">
+              <div className="mt-4 pt-4 border-t border-border/30 flex items-center justify-between">
+                <Link to="/api-docs" className="glass-button text-xs gap-1.5 hover:bg-acid/10 hover:text-acid transition-all duration-200">
                   <ExternalLink size={12} />
                   View API documentation
                 </Link>
                 <button 
                   onClick={handleRotateKey}
-                  className="text-[10px] font-mono text-muted hover:text-red-400 transition-colors uppercase"
+                  className="text-[10px] font-mono text-muted hover:text-acid transition-colors uppercase"
                 >
                   Rotate Key
                 </button>
@@ -302,8 +302,8 @@ export function Dashboard() {
             </>
           ) : (
             <div className="text-center py-4">
-              <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center mx-auto mb-3">
-                <Key size={18} className="text-muted" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-acid/20 to-purple-500/20 border border-acid/40 flex items-center justify-center mx-auto mb-3">
+                <Key size={18} className="text-acid" />
               </div>
               <p className="font-mono text-sm text-secondary mb-1">
                 API access requires the API plan

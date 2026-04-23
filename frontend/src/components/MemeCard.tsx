@@ -56,9 +56,9 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
   };
 
   return (
-    <article className={`group card-dark flex flex-col hover:border-border-light transition-all duration-300 ${className}`}>
+    <article className={`group glass-card flex flex-col overflow-hidden hover:border-acid/40 hover:shadow-acid transition-all duration-300 ${className}`}>
       {/* Image */}
-      <div className="relative aspect-square overflow-hidden bg-surface-2 rounded-t-xl">
+      <div className="relative aspect-square overflow-hidden bg-background rounded-lg">
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-acid border-t-transparent rounded-full animate-spin" />
@@ -82,10 +82,10 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
           <div className="flex items-center gap-2">
             <button
               onClick={handleLike}
-              className={`p-2 rounded-full backdrop-blur-sm transition-colors ${
+              className={`p-2 rounded-full backdrop-blur-sm transition-all duration-200 ${
                 liked 
-                  ? 'bg-red-500/20 text-red-400' 
-                  : 'bg-black/40 text-white hover:bg-black/60'
+                  ? 'bg-red-500/30 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.4)]' 
+                  : 'bg-black/40 text-white hover:bg-acid/20 hover:text-acid'
               }`}
               title={liked ? 'Unlike' : 'Like'}
               aria-label={liked ? 'Unlike meme' : 'Like meme'}
@@ -97,7 +97,7 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
             
             <button
               onClick={handleDownload}
-              className="p-2 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm transition-colors"
+              className="p-2 rounded-full bg-black/40 text-white hover:bg-acid/20 hover:text-acid backdrop-blur-sm transition-all duration-200"
               title="Download"
               aria-label="Download meme image"
             >
@@ -106,7 +106,7 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
             
             <Link
               to={`/meme/${meme.id}`}
-              className="p-2 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm transition-colors"
+              className="p-2 rounded-full bg-black/40 text-white hover:bg-acid/20 hover:text-acid backdrop-blur-sm transition-all duration-200"
               title="View details"
               aria-label="View meme details"
             >
@@ -166,8 +166,8 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
           <div className="flex items-center gap-2">
             <button
               onClick={handleLike}
-              className={`flex items-center gap-1 hover:text-red-400 transition-colors ${
-                liked ? 'text-red-400' : ''
+              className={`flex items-center gap-1 transition-all duration-200 ${
+                liked ? 'text-red-400' : 'text-muted hover:text-acid'
               }`}
               aria-label={`${liked ? 'Remove like' : 'Like'} meme`}
             >

@@ -104,15 +104,15 @@ export function Gallery() {
         {/* ── Controls ─────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Sort tabs */}
-          <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
+          <div className="flex items-center gap-1 glass-card p-1 border-border/40 !p-1 !rounded-lg">
             {sortTabs.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 onClick={() => setSort(id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${
                   sort === id
-                     ? "bg-acid text-black font-medium"
-                     : "text-secondary hover:text-primary"
+                     ? "bg-acid text-black font-medium shadow-glow-sm"
+                     : "text-secondary hover:text-acid hover:bg-acid/10"
                 }`}
                 aria-label={`Sort by ${label}`}
                 aria-pressed={sort === id}
