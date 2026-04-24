@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     rate_limit_free: int = 5
     rate_limit_pro: int = 500
     rate_limit_api: int = 500
+    rate_limit_templates_read: int = 1000
+    rate_limit_trending_read: int = 1000
     
     # Stripe
     stripe_secret_key: str = ""

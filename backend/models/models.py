@@ -95,6 +95,10 @@ class MemeJob(Base):
     id: str = Column(String, primary_key=True)
     user_id: Optional[str] = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     prompt: str = Column(Text, nullable=False)
+    ai_provider: str = Column(String, default="openai", nullable=False, index=True)
+    generation_mode: str = Column(String, default="auto", nullable=False, index=True)  # "auto" | "manual"
+    manual_template_id: Optional[int] = Column(Integer, nullable=True)
+    manual_captions: Optional[List[str]] = Column(JSON, nullable=True)
     status: str = Column(String, default="pending", index=True)  # "pending", "processing", "completed", "failed"
     result_meme_ids: List[str] = Column(JSON, nullable=True)  # List of generated meme IDs
     error_message: Optional[str] = Column(Text, nullable=True)
@@ -152,9 +156,12 @@ class MemeTemplate(Base):
     text_stroke: bool = Column(Boolean, default=False)
     usage_instructions: str = Column(Text, nullable=False)
     number_of_text_fields: int = Column(Integer, nullable=False)
+    # New canonical fields used by manual editor APIs.
+    text_coordinates: Optional[List[List[int]]] = Column(JSON, nullable=True)
     text_coordinates_xy_wh: List[List[int]] = Column(JSON, nullable=False)
     example_output: List[str] = Column(JSON, nullable=False)
     image_url: Optional[str] = Column(String, nullable=True)
+    preview_image_url: Optional[str] = Column(String, nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now())
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

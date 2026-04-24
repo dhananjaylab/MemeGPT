@@ -33,12 +33,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Middleware to apply rate limiting to specific API routes.
     """
     async def dispatch(self, request: Request, call_next):
-        # Only rate limit meme generation and jobs creation
-        rate_limited_paths = ["/api/memes/generate", "/api/jobs"]
-        
-        should_rate_limit = any(request.url.path.startswith(path) for path in rate_limited_paths)
-        
-        if should_rate_limit and request.method == "POST":
+        path = request.url.path
+        method = request.method
+
+        should_rate_limit = False
+        custom_limit = None
+
+        # Enforce generation daily limits (plan-based by default).
+        if method == "POST" and path.startswith("/api/memes/generate"):
+            should_rate_limit = True
+
+        # Apply generous read limits for new high-read endpoints.
+        if method == "GET" and path.startswith("/api/memes/templates"):
+            should_rate_limit = True
+            custom_limit = settings.rate_limit_templates_read
+
+        if method == "GET" and path.startswith("/api/trending/topics"):
+            should_rate_limit = True
+            custom_limit = settings.rate_limit_trending_read
+
+        if should_rate_limit:
             user_id = None
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
@@ -52,7 +66,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             
             try:
                 # We call rate_limit_request which will handle either User ID or IP
-                _, remaining = await rate_limit_request(request, user_id=user_id)
+                _, remaining = await rate_limit_request(
+                    request,
+                    user_id=user_id,
+                    custom_limit=custom_limit,
+                )
                 # Store in state so routers can access it (e.g. for returning remaining count in API)
                 request.state.rate_limit_remaining = remaining
             except HTTPException as e:

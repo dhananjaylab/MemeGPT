@@ -14,7 +14,7 @@ from pathlib import Path
 from core.config import settings
 from db.session import AsyncSessionLocal
 from models.models import MemeJob, GeneratedMeme, User, MemeTemplate
-from services.meme_ai import generate_meme_captions, generate_meme_captions_with_gemini, AIProvider
+from services.meme_ai import get_caption_generator, AIProvider
 from services.compositor import overlay_text_on_image
 from services.storage import upload_to_r2
 
@@ -71,18 +71,43 @@ async def get_template_by_id(db: AsyncSession, template_id: int) -> Optional[Dic
         }
     return None
 
-async def process_meme_generation(ctx: Dict[str, Any], job_id: str, user_id: Optional[str], prompt: str, ai_provider: str = "openai") -> Dict[str, Any]:
+async def process_meme_generation(
+    ctx: Dict[str, Any],
+    job_id: str,
+    user_id: Optional[str],
+    prompt: str,
+    ai_provider: str = "openai",
+    generation_mode: str = "auto",
+    manual_template_id: Optional[int] = None,
+    manual_captions: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Full pipeline: AI -> Compositor -> Storage -> DB"""
-    logger.info(f"Processing job {job_id} with provider: {ai_provider}")
+    logger.info(f"Processing job {job_id} with provider={ai_provider}, mode={generation_mode}")
     await update_job_status(job_id, "processing")
     
     try:
-        # 1. AI Caption Generation (route to correct provider)
-        if ai_provider.lower() == AIProvider.GEMINI.value:
-            captions = await generate_meme_captions_with_gemini(prompt)
+        # 1. Caption generation
+        if generation_mode.lower() == "manual":
+            if manual_template_id is None or not manual_captions:
+                await update_job_status(
+                    job_id,
+                    "failed",
+                    error_message="Manual mode requires template_id and captions",
+                )
+                return {"status": "failed"}
+            captions = [
+                {
+                    "meme_id": int(manual_template_id),
+                    "meme_name": "manual",
+                    "meme_text": manual_captions,
+                }
+            ]
         else:
-            # Default to OpenAI for backward compatibility
-            captions = await generate_meme_captions(prompt)
+            provider = ai_provider.lower()
+            if provider not in {AIProvider.OPENAI.value, AIProvider.GEMINI.value}:
+                provider = AIProvider.OPENAI.value
+            generator = await get_caption_generator(provider)
+            captions = await generator(prompt)
         
         if not captions:
             await update_job_status(job_id, "failed", error_message=f"AI ({ai_provider}) failed to generate captions")

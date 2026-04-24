@@ -1,16 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { MemeCard } from "../components/MemeCard";
 import type { GeneratedMeme } from "../lib/types";
-import { Loader2, LayoutGrid, Flame, Clock, Search, Zap } from "lucide-react";
+import { Loader2, LayoutGrid, Flame, Clock, Search, Zap, User, Globe } from "lucide-react";
 import { apiClient } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type SortMode = "recent" | "top" | "trending";
+type ViewMode = "all" | "my";
 
 const PAGE_SIZE = 20;
 
-async function fetchMemes(page: number, sort: SortMode): Promise<{ memes: GeneratedMeme[]; total: number }> {
+async function fetchMemes(page: number, sort: SortMode, userOnly: boolean = false): Promise<{ memes: GeneratedMeme[]; total: number }> {
   try {
-    const data = await apiClient.getMemes({ page, limit: PAGE_SIZE, sort });
+    const params: any = { page, limit: PAGE_SIZE, sort };
+    if (userOnly) {
+      params.user = 'me';
+    }
+    
+    const data = await apiClient.getMemes(params);
     
     return { 
       memes: data.memes || [], 
@@ -24,6 +31,7 @@ async function fetchMemes(page: number, sort: SortMode): Promise<{ memes: Genera
 
 export function Gallery() {
   const [sort, setSort] = useState<SortMode>("recent");
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [search, setSearch] = useState("");
   const [memes, setMemes] = useState<GeneratedMeme[]>([]);
   const [page, setPage] = useState(1);
@@ -32,6 +40,7 @@ export function Gallery() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
+  const { isAuthenticated } = useAuth();
 
   const hasMore = memes.length < total || total === 0;
 
@@ -40,7 +49,7 @@ export function Gallery() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchMemes(pageNum, sort);
+        const data = await fetchMemes(pageNum, sort, viewMode === "my");
         setMemes((prev) => (reset ? data.memes : [...prev, ...data.memes]));
         setTotal(data.total);
         setPage(pageNum);
@@ -51,15 +60,15 @@ export function Gallery() {
         setInitialLoad(false);
       }
     },
-    [sort]
+    [sort, viewMode]
   );
 
-  // Reset on sort change
+  // Reset on sort or view mode change
   useEffect(() => {
     setInitialLoad(true);
     setMemes([]);
     loadPage(1, true);
-  }, [sort, loadPage]);
+  }, [sort, viewMode, loadPage]);
 
   // Infinite scroll via IntersectionObserver
   useEffect(() => {

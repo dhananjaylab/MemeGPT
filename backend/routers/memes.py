@@ -17,6 +17,9 @@ router = APIRouter()
 class GenerateMemeRequest(BaseModel):
     prompt: str
     ai_provider: Optional[str] = "openai"  # "openai" or "gemini"
+    generation_mode: Optional[str] = "auto"  # "auto" or "manual"
+    template_id: Optional[int] = None
+    captions: Optional[List[str]] = None
 
 
 class GenerateMemeResponse(BaseModel):
@@ -66,9 +69,29 @@ async def generate_meme(
     
     # Normalize ai_provider
     ai_provider = (body.ai_provider or "openai").lower()
+    if ai_provider not in {"openai", "gemini"}:
+        raise HTTPException(status_code=400, detail="ai_provider must be 'openai' or 'gemini'")
+
+    # Normalize generation mode
+    generation_mode = (body.generation_mode or "auto").lower()
+    if generation_mode not in {"auto", "manual"}:
+        raise HTTPException(status_code=400, detail="generation_mode must be 'auto' or 'manual'")
+
+    if generation_mode == "manual":
+        if body.template_id is None:
+            raise HTTPException(status_code=400, detail="template_id is required for manual mode")
+        if not body.captions or not any(c.strip() for c in body.captions):
+            raise HTTPException(status_code=400, detail="captions are required for manual mode")
     
     # Enqueue meme generation job with specified AI provider
-    job_id = await enqueue_meme_generation(body.prompt, current_user, ai_provider)
+    job_id = await enqueue_meme_generation(
+        prompt=body.prompt,
+        user=current_user,
+        ai_provider=ai_provider,
+        generation_mode=generation_mode,
+        manual_template_id=body.template_id,
+        manual_captions=body.captions,
+    )
     
     return GenerateMemeResponse(
         job_id=job_id,
@@ -229,8 +252,8 @@ async def get_templates(
             name=template.name,
             image_url=template.image_url,
             text_field_count=template.number_of_text_fields,
-            text_coordinates=template.text_coordinates_xy_wh,
-            preview_image_url=template.image_url,  # Same as image_url for now
+            text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+            preview_image_url=template.preview_image_url or template.image_url,
             font_path=template.font_path
         )
         for template in templates
@@ -255,8 +278,8 @@ async def get_template(
         name=template.name,
         image_url=template.image_url,
         text_field_count=template.number_of_text_fields,
-        text_coordinates=template.text_coordinates_xy_wh,
-        preview_image_url=template.image_url,
+        text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+        preview_image_url=template.preview_image_url or template.image_url,
         font_path=template.font_path
     )
 

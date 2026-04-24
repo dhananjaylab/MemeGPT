@@ -42,12 +42,22 @@ async def close_arq_pool():
         _arq_pool = None
         logger.info("ARQ Redis pool closed")
 
-async def enqueue_meme_generation(prompt: str, user: Optional[User] = None, ai_provider: str = "openai") -> str:
+async def enqueue_meme_generation(
+    prompt: str,
+    user: Optional[User] = None,
+    ai_provider: str = "openai",
+    generation_mode: str = "auto",
+    manual_template_id: Optional[int] = None,
+    manual_captions: Optional[List[str]] = None,
+) -> str:
     """Enqueue a meme generation job"""
     job_id = str(uuid4())
     user_id = user.id if user else None
     
-    logger.info(f"Enqueueing meme generation job {job_id} for user {user_id} with provider {ai_provider}")
+    logger.info(
+        f"Enqueueing meme generation job {job_id} for user {user_id} with "
+        f"provider={ai_provider} mode={generation_mode}"
+    )
     
     try:
         # Create job record in database
@@ -56,6 +66,10 @@ async def enqueue_meme_generation(prompt: str, user: Optional[User] = None, ai_p
                 id=job_id,
                 user_id=user_id,
                 prompt=prompt,
+                ai_provider=ai_provider,
+                generation_mode=generation_mode,
+                manual_template_id=manual_template_id,
+                manual_captions=manual_captions,
                 status="pending"
             )
             db.add(job)
@@ -70,6 +84,9 @@ async def enqueue_meme_generation(prompt: str, user: Optional[User] = None, ai_p
             user_id,
             prompt,
             ai_provider,
+            generation_mode,
+            manual_template_id,
+            manual_captions,
             _job_timeout=300,  # 5 minutes timeout
         )
         

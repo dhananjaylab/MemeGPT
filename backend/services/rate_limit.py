@@ -80,7 +80,8 @@ async def rate_limit_request(
     request: Request, 
     user: Optional[User] = None,
     user_id: Optional[str] = None,
-    db: Optional[AsyncSession] = None
+    db: Optional[AsyncSession] = None,
+    custom_limit: Optional[int] = None,
 ) -> Tuple[int, int]:
     """
     Determine the rate limit identifier and ceiling for a request,
@@ -127,5 +128,8 @@ async def rate_limit_request(
             ip = forwarded.split(",")[0].strip()
         identifier = f"ip:{ip}"
         limit = settings.rate_limit_free
+
+    if custom_limit is not None:
+        limit = custom_limit
 
     return await check_rate_limit(identifier, limit)
