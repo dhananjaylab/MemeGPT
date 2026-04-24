@@ -149,7 +149,7 @@ export function MemeEditor({
             <ArrowUpToLine size={16} />
             Font Size
           </span>
-          <span className="text-acid font-semibold">{selectedText.style.fontSize || 24}px</span>
+          <span className="text-acid font-semibold">{selectedText.fontSize || 24}px</span>
         </label>
         <input
           type="range"

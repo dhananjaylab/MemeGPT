@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { MemeCard } from "../components/MemeCard";
 import type { GeneratedMeme } from "../lib/types";
-import { Loader2, LayoutGrid, Flame, Clock, Search, Zap, User, Globe } from "lucide-react";
+import { Loader2, Flame, Clock, Search, Zap } from "lucide-react";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
 
 type SortMode = "recent" | "top" | "trending";
 type ViewMode = "all" | "my";
@@ -31,7 +30,7 @@ async function fetchMemes(page: number, sort: SortMode, userOnly: boolean = fals
 
 export function Gallery() {
   const [sort, setSort] = useState<SortMode>("recent");
-  const [viewMode, setViewMode] = useState<ViewMode>("all");
+  const [viewMode] = useState<ViewMode>("all");
   const [search, setSearch] = useState("");
   const [memes, setMemes] = useState<GeneratedMeme[]>([]);
   const [page, setPage] = useState(1);
@@ -40,8 +39,6 @@ export function Gallery() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated } = useAuth();
-
   const hasMore = memes.length < total || total === 0;
 
   const loadPage = useCallback(

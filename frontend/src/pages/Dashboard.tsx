@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Key, Copy, Check, Eye, EyeOff, ExternalLink,
-  Zap, Trash2, BarChart2, User as UserIcon, Heart, Download, Share2,
+  Zap, Trash2, BarChart2, User as UserIcon,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
