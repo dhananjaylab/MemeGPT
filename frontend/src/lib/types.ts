@@ -2,15 +2,19 @@
 export interface MemeTemplate {
   id: number;
   name: string;
-  alternative_names: string[];
-  file_path: string;
-  font_path: string;
-  text_color: string;
-  text_stroke: boolean;
-  usage_instructions: string;
-  number_of_text_fields: number;
-  text_coordinates_xy_wh: number[][];
-  example_output: string[];
+  alternative_names?: string[];
+  file_path?: string;
+  font_path?: string;
+  text_color?: string;
+  text_stroke?: boolean;
+  usage_instructions?: string;
+  number_of_text_fields?: number;
+  text_coordinates_xy_wh?: number[][];
+  text_field_count?: number;
+  text_coordinates?: number[][];
+  preview_image_url?: string;
+  image_url?: string;
+  example_output?: string[];
 }
 
 // Generated meme from API
@@ -44,12 +48,14 @@ export interface GenerateMemeResponse {
 }
 
 export interface JobStatusResponse {
-  job_id: string;
+  id?: string;
+  job_id?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress?: number;
   result?: {
     memes: GeneratedMeme[];
   };
+  memes?: GeneratedMeme[];
   error?: string;
   created_at: string;
   updated_at: string;
@@ -146,6 +152,10 @@ export interface MemeStats {
 // Form types
 export interface GenerateMemeRequest {
   prompt: string;
+  ai_provider?: 'openai' | 'gemini';
+  generation_mode?: 'auto' | 'manual';
+  template_id?: number;
+  captions?: string[];
   template_ids?: number[];
   max_memes?: number;
   style_preferences?: {

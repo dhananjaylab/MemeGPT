@@ -158,7 +158,7 @@ class APIClient {
 
   // Trending topics
   async getTrendingTopics(): Promise<TrendingResponse> {
-    return this.request<TrendingResponse>('/trending');
+    return this.request<TrendingResponse>('/trending/topics');
   }
 
   // User management

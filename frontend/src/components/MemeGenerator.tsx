@@ -8,7 +8,7 @@ import { MemePreview } from './MemePreview';
 import { MemeEditor } from './MemeEditor';
 import { TemplateSelector } from './TemplateSelector';
 import { TrendingTopics } from './TrendingTopics';
-import type { GeneratedMeme } from '../lib/types';
+import type { GeneratedMeme, MemeTemplate } from '../lib/types';
 import { generateMemes, apiClient } from '../lib/api';
 import type { TextPosition } from '../lib/canvas';
 
@@ -26,20 +26,11 @@ interface TextField {
   height: number;
 }
 
-interface Template {
-  id: number;
-  name: string;
-  image_url: string;
-  text_field_count: number;
-  text_coordinates: Array<number[] | { x: number; y: number; maxWidth?: number; maxHeight?: number }>;
-  preview_image_url: string;
-  font_path: string;
-}
-
 interface AISuggestion {
   id: string;
-  template: Template;
+  template: MemeTemplate;
   captions: string[];
+  reasoning?: string;
 }
 
 export function MemeGenerator() {
@@ -53,7 +44,7 @@ export function MemeGenerator() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   
   // Manual mode states
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<MemeTemplate | null>(null);
   const [textFields, setTextFields] = useState<TextField[]>([]);
   const [canvasSize] = useState({ width: 600, height: 400 });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -67,7 +58,7 @@ export function MemeGenerator() {
     setSelectedTemplate(suggestion.template);
     
     // Initialize text fields from suggestion
-    const newFields: TextField[] = suggestion.template.text_coordinates.map((coord, idx) => {
+    const newFields: TextField[] = (suggestion.template.text_coordinates || []).map((coord, idx) => {
       const c = Array.isArray(coord)
         ? { x: coord[0] ?? 10, y: coord[1] ?? 10, maxWidth: coord[2] ?? 80, maxHeight: coord[3] ?? 20 }
         : coord;
@@ -106,11 +97,11 @@ export function MemeGenerator() {
     setCurrentSuggestionIdx(0);
 
     try {
-      // Call /api/ai/suggest endpoint
+      // Call /api/ai/suggest endpoint (prefer Gemini for synthesis)
       const response = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: prompt.trim(), provider: 'gemini' }),
       });
 
       if (!response.ok) {
@@ -118,11 +109,25 @@ export function MemeGenerator() {
       }
 
       const data = await response.json();
-      const suggestions: AISuggestion[] = (data.options || []).map((option: any, idx: number) => ({
-        id: `suggestion-${idx}`,
-        template: option.template,
-        captions: option.captions,
-      }));
+      const templatesRes = await fetch('/api/memes/templates');
+      if (!templatesRes.ok) {
+        throw new Error('Failed to load templates for suggestions');
+      }
+      const templates: MemeTemplate[] = await templatesRes.json();
+      const templatesById = new Map<number, MemeTemplate>(templates.map((t) => [t.id, t]));
+
+      const suggestions: AISuggestion[] = (data.options || [])
+        .map((option: any, idx: number) => {
+          const template = templatesById.get(option.meme_id);
+          if (!template) return null;
+          return {
+            id: `suggestion-${idx}`,
+            template,
+            captions: option.meme_text || [],
+            reasoning: option.reasoning,
+          };
+        })
+        .filter(Boolean) as AISuggestion[];
 
       if (suggestions.length === 0) {
         toast.error('No suggestions generated. Try a different prompt.');
@@ -147,7 +152,12 @@ export function MemeGenerator() {
     setIsGenerating(true);
 
     try {
-      const result = await generateMemes(prompt.trim() || 'custom meme');
+      const trimmedCaptions = textFields.map((field) => field.text.trim()).filter(Boolean);
+      const result = await generateMemes(prompt.trim() || 'custom meme', {
+        generation_mode: 'manual',
+        template_id: selectedTemplate.id,
+        captions: trimmedCaptions,
+      });
       
       if (result.job_id) {
         pollJobStatus(result.job_id);
@@ -172,10 +182,11 @@ export function MemeGenerator() {
       try {
         const data = await apiClient.getJobStatus(id);
 
-        if (data.status === 'completed' && data.result?.memes) {
-          setMemes(prev => [...(data.result?.memes || []), ...prev]);
+        const completedMemes = data.memes || data.result?.memes || [];
+        if (data.status === 'completed' && completedMemes.length > 0) {
+          setMemes(prev => [...completedMemes, ...prev]);
           triggerConfetti();
-          toast.success(`Generated ${data.result.memes.length} memes!`);
+          toast.success(`Generated ${completedMemes.length} memes!`);
           setIsGenerating(false);
           return;
         }
@@ -339,7 +350,7 @@ export function MemeGenerator() {
                       >
                         <div className="aspect-video bg-surface overflow-hidden">
                           <img
-                            src={autoSuggestions[currentSuggestionIdx].template.image_url}
+                            src={autoSuggestions[currentSuggestionIdx].template.image_url || autoSuggestions[currentSuggestionIdx].template.preview_image_url}
                             alt={autoSuggestions[currentSuggestionIdx].template.name}
                             className="w-full h-full object-cover"
                           />
@@ -362,6 +373,14 @@ export function MemeGenerator() {
                               ))}
                             </div>
                           </div>
+                          {autoSuggestions[currentSuggestionIdx].reasoning && (
+                            <div className="p-3 bg-surface-2 rounded border border-border/40">
+                              <p className="text-xs text-muted mb-1">Reasoning</p>
+                              <p className="text-sm text-secondary">
+                                {autoSuggestions[currentSuggestionIdx].reasoning}
+                              </p>
+                            </div>
+                          )}
 
                           <button
                             onClick={() => switchToManualWithSuggestion(autoSuggestions[currentSuggestionIdx])}
@@ -492,7 +511,7 @@ export function MemeGenerator() {
                   <div>
                     <h3 className="font-semibold mb-4">Preview</h3>
                     <MemePreview
-                      templateImageUrl={selectedTemplate.image_url}
+                      templateImageUrl={selectedTemplate.image_url || selectedTemplate.preview_image_url || ''}
                       texts={textFields}
                       onTextPositionUpdate={handleTextPositionUpdate}
                       isLocked={false}
