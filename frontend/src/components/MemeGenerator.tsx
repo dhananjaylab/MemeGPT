@@ -10,6 +10,7 @@ import { TemplateSelector } from './TemplateSelector';
 import { TrendingTopics } from './TrendingTopics';
 import type { GeneratedMeme } from '../lib/types';
 import { generateMemes, apiClient } from '../lib/api';
+import type { TextPosition } from '../lib/canvas';
 
 interface TextField {
   id: string;
@@ -18,16 +19,19 @@ interface TextField {
   fontSize: number;
   uppercase: boolean;
   stroke: boolean;
+  autoResize: boolean;
   x: number;
   y: number;
+  width: number;
+  height: number;
 }
 
 interface Template {
-  id: string;
+  id: number;
   name: string;
   image_url: string;
   text_field_count: number;
-  text_coordinates: Array<{ x: number; y: number; maxWidth: number; maxHeight: number }>;
+  text_coordinates: Array<number[] | { x: number; y: number; maxWidth?: number; maxHeight?: number }>;
   preview_image_url: string;
   font_path: string;
 }
@@ -51,9 +55,8 @@ export function MemeGenerator() {
   // Manual mode states
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [textFields, setTextFields] = useState<TextField[]>([]);
-  const [canvasSize, setCanvasSize] = useState({ width: 600, height: 400 });
+  const [canvasSize] = useState({ width: 600, height: 400 });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
   
   // Results
   const [memes, setMemes] = useState<GeneratedMeme[]>([]);
@@ -64,16 +67,24 @@ export function MemeGenerator() {
     setSelectedTemplate(suggestion.template);
     
     // Initialize text fields from suggestion
-    const newFields: TextField[] = suggestion.template.text_coordinates.map((coord, idx) => ({
+    const newFields: TextField[] = suggestion.template.text_coordinates.map((coord, idx) => {
+      const c = Array.isArray(coord)
+        ? { x: coord[0] ?? 10, y: coord[1] ?? 10, maxWidth: coord[2] ?? 80, maxHeight: coord[3] ?? 20 }
+        : coord;
+      return {
       id: `text-${idx}`,
       text: suggestion.captions[idx] || '',
       color: '#FFFFFF',
       fontSize: 32,
       uppercase: false,
       stroke: true,
-      x: coord.x,
-      y: coord.y,
-    }));
+      autoResize: true,
+      x: c.x,
+      y: c.y,
+      width: c.maxWidth ?? 80,
+      height: c.maxHeight ?? 20,
+      };
+    });
     setTextFields(newFields);
     setMode('manual');
   }, []);
@@ -134,13 +145,11 @@ export function MemeGenerator() {
     }
 
     setIsGenerating(true);
-    setJobId(null);
 
     try {
       const result = await generateMemes(prompt.trim() || 'custom meme');
       
       if (result.job_id) {
-        setJobId(result.job_id);
         pollJobStatus(result.job_id);
       } else if (result.memes) {
         setMemes(prev => [...(result.memes || []), ...prev]);
@@ -168,14 +177,12 @@ export function MemeGenerator() {
           triggerConfetti();
           toast.success(`Generated ${data.result.memes.length} memes!`);
           setIsGenerating(false);
-          setJobId(null);
           return;
         }
 
         if (data.status === 'failed') {
           toast.error(data.error || 'Generation failed');
           setIsGenerating(false);
-          setJobId(null);
           return;
         }
 
@@ -185,13 +192,11 @@ export function MemeGenerator() {
         } else if (attempts >= maxAttempts) {
           toast.error('Generation timed out');
           setIsGenerating(false);
-          setJobId(null);
         }
       } catch (error) {
         console.error('Polling error:', error);
         toast.error('Failed to check generation status');
         setIsGenerating(false);
-        setJobId(null);
       }
     };
 
@@ -221,9 +226,9 @@ export function MemeGenerator() {
     );
   };
 
-  const handleTextPositionUpdate = (id: string, x: number, y: number) => {
+  const handleTextPositionUpdate = (id: string, newPosition: TextPosition) => {
     setTextFields(prev =>
-      prev.map(field => (field.id === id ? { ...field, x, y } : field))
+      prev.map(field => (field.id === id ? { ...field, ...newPosition } : field))
     );
   };
 
@@ -407,22 +412,30 @@ export function MemeGenerator() {
                 <div>
                   <h3 className="font-semibold mb-4">Choose a Template</h3>
                   <TemplateSelector
-                    onSelectTemplate={(templateId) => {
+                    onSelectTemplate={(template) => {
                       // Fetch full template data
-                      fetch(`/api/memes/templates/${templateId}`)
+                      fetch(`/api/memes/templates/${template.id}`)
                         .then(res => res.json())
                         .then(data => {
                           setSelectedTemplate(data);
-                          const newFields: TextField[] = data.text_coordinates.map((coord: any, idx: number) => ({
-                            id: `text-${idx}`,
-                            text: '',
-                            color: '#FFFFFF',
-                            fontSize: 32,
-                            uppercase: false,
-                            stroke: true,
-                            x: coord.x,
-                            y: coord.y,
-                          }));
+                          const newFields: TextField[] = (data.text_coordinates || []).map((coord: any, idx: number) => {
+                            const c = Array.isArray(coord)
+                              ? { x: coord[0] ?? 10, y: coord[1] ?? 10, maxWidth: coord[2] ?? 80, maxHeight: coord[3] ?? 20 }
+                              : coord;
+                            return {
+                              id: `text-${idx}`,
+                              text: '',
+                              color: '#FFFFFF',
+                              fontSize: 32,
+                              uppercase: false,
+                              stroke: true,
+                              autoResize: true,
+                              x: c.x,
+                              y: c.y,
+                              width: c.maxWidth ?? 80,
+                              height: c.maxHeight ?? 20,
+                            };
+                          });
                           setTextFields(newFields);
                         })
                         .catch(err => {

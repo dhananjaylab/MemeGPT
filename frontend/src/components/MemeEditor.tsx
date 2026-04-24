@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { Type, Palette, ArrowUpToLine, Settings2 } from 'lucide-react';
-import { TextStyle, TextPosition } from '../lib/canvas';
 
 export interface MemeEditorProps {
   texts: Array<{
     id: string;
     text: string;
-    position: TextPosition;
-    style: Partial<TextStyle>;
+    color?: string;
+    fontSize?: number;
+    uppercase?: boolean;
+    stroke?: boolean;
+    autoResize?: boolean;
   }>;
   onTextUpdate?: (textId: string, newText: string) => void;
-  onStyleUpdate?: (textId: string, newStyle: Partial<TextStyle>) => void;
+  onStyleUpdate?: (textId: string, newStyle: Record<string, string | number | boolean>) => void;
 }
 
 const COLOR_PRESETS = [
@@ -55,13 +57,19 @@ export function MemeEditor({
 
   const handleUppercaseToggle = () => {
     onStyleUpdate?.(selectedTextId!, {
-      uppercase: !(selectedText.style.uppercase || false),
+      uppercase: !(selectedText.uppercase || false),
     });
   };
 
   const handleStrokeToggle = () => {
     onStyleUpdate?.(selectedTextId!, {
-      stroke: !(selectedText.style.stroke || false),
+      stroke: !(selectedText.stroke || false),
+    });
+  };
+
+  const handleAutoResizeToggle = () => {
+    onStyleUpdate?.(selectedTextId!, {
+      autoResize: !(selectedText.autoResize ?? true),
     });
   };
 
@@ -119,14 +127,14 @@ export function MemeEditor({
               key={color.value}
               onClick={() => handleColorChange(color.value)}
               className={`p-3 rounded-lg border-2 transition-all ${
-                selectedText.style.color === color.value
+                selectedText.color === color.value
                   ? 'border-acid'
                   : 'border-border hover:border-border-light'
               }`}
               style={{ backgroundColor: color.value }}
               title={color.name}
             >
-              {selectedText.style.color === color.value && (
+              {selectedText.color === color.value && (
                 <div className="text-black text-sm font-bold">✓</div>
               )}
             </button>
@@ -147,7 +155,7 @@ export function MemeEditor({
           type="range"
           min="12"
           max="72"
-          value={selectedText.style.fontSize || 24}
+          value={selectedText.fontSize || 24}
           onChange={handleFontSizeChange}
           className="w-full accent-acid"
         />
@@ -164,7 +172,7 @@ export function MemeEditor({
             key={size}
             onClick={() => onStyleUpdate?.(selectedTextId!, { fontSize: size })}
             className={`px-3 py-1 text-sm rounded border transition-all ${
-              selectedText.style.fontSize === size
+              selectedText.fontSize === size
                 ? 'bg-acid text-black border-acid'
                 : 'border-border hover:border-acid/50 text-secondary'
             }`}
@@ -179,25 +187,37 @@ export function MemeEditor({
         <button
           onClick={handleUppercaseToggle}
           className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
-            selectedText.style.uppercase
+            selectedText.uppercase
               ? 'bg-acid/20 border-acid text-acid'
               : 'border-border hover:border-acid/50 text-secondary'
           }`}
         >
           <Settings2 size={16} />
-          {selectedText.style.uppercase ? 'UPPERCASE (On)' : 'Uppercase (Off)'}
+          {selectedText.uppercase ? 'UPPERCASE (On)' : 'Uppercase (Off)'}
         </button>
 
         <button
           onClick={handleStrokeToggle}
           className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
-            selectedText.style.stroke
+            selectedText.stroke
               ? 'bg-acid/20 border-acid text-acid'
               : 'border-border hover:border-acid/50 text-secondary'
           }`}
         >
           <Settings2 size={16} />
-          Text Stroke: {selectedText.style.stroke ? 'On' : 'Off'}
+          Text Stroke: {selectedText.stroke ? 'On' : 'Off'}
+        </button>
+
+        <button
+          onClick={handleAutoResizeToggle}
+          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
+            (selectedText.autoResize ?? true)
+              ? 'bg-acid/20 border-acid text-acid'
+              : 'border-border hover:border-acid/50 text-secondary'
+          }`}
+        >
+          <Settings2 size={16} />
+          Auto Resize: {(selectedText.autoResize ?? true) ? 'On' : 'Off'}
         </button>
       </div>
 
@@ -205,10 +225,11 @@ export function MemeEditor({
       <div className="bg-surface-2 rounded-lg p-3 border border-border">
         <p className="text-xs text-muted mb-1">Current Style</p>
         <div className="text-sm font-mono text-secondary space-y-1">
-          <div>Color: {selectedText.style.color || '#ffffff'}</div>
-          <div>Size: {selectedText.style.fontSize || 24}px</div>
-          <div>Uppercase: {selectedText.style.uppercase ? 'Yes' : 'No'}</div>
-          <div>Stroke: {selectedText.style.stroke ? 'Yes' : 'No'}</div>
+          <div>Color: {selectedText.color || '#ffffff'}</div>
+          <div>Size: {selectedText.fontSize || 24}px</div>
+          <div>Uppercase: {selectedText.uppercase ? 'Yes' : 'No'}</div>
+          <div>Stroke: {selectedText.stroke ? 'Yes' : 'No'}</div>
+          <div>Auto Resize: {(selectedText.autoResize ?? true) ? 'Yes' : 'No'}</div>
         </div>
       </div>
     </div>

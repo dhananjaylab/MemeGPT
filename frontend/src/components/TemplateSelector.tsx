@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, Upload } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -10,6 +10,7 @@ export interface Template {
   text_coordinates: number[][];
   preview_image_url?: string;
   font_path: string;
+  usage_instructions?: string;
 }
 
 export interface TemplateSelectorProps {
@@ -155,6 +156,11 @@ export function TemplateSelector({
                         template.text_field_count !== 1 ? 's' : ''
                       }
                     </p>
+                    {template.usage_instructions && (
+                      <p className="text-[10px] text-gray-300 mt-1 line-clamp-2">
+                        {template.usage_instructions}
+                      </p>
+                    )}
                   </div>
 
                   {/* Selected Checkmark */}

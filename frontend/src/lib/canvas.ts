@@ -95,7 +95,7 @@ export function drawText(
   position: TextPosition,
   style: Partial<TextStyle>,
   canvasWidth: number,
-  canvasHeight: number
+  _canvasHeight: number
 ): void {
   if (!text) return;
 

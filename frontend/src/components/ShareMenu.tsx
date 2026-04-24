@@ -1,28 +1,33 @@
-import React, { useState } from 'react';
-import { Share2, Twitter, MessageCircle, Reddit, Copy, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Share2, Send, MessageCircle, Globe, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { GeneratedMeme } from '../lib/types';
 
 export interface ShareMenuProps {
-  memeUrl: string;
+  meme?: GeneratedMeme;
+  memeUrl?: string;
   memeTitle?: string;
   onShare?: (platform: string) => void;
 }
 
 export function ShareMenu({
+  meme,
   memeUrl,
   memeTitle = 'Check out this awesome meme!',
   onShare,
 }: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const resolvedUrl = memeUrl || (meme ? `${window.location.origin}/meme/${meme.id}` : '');
+  const resolvedTitle = memeTitle || (meme ? `${meme.template_name} meme` : 'Check out this awesome meme!');
 
   const shareOptions = [
     {
       name: 'Twitter',
-      icon: Twitter,
+      icon: Send,
       color: 'hover:text-blue-400',
       action: () => {
-        const text = encodeURIComponent(`${memeTitle} ${memeUrl}`);
+        const text = encodeURIComponent(`${resolvedTitle} ${resolvedUrl}`);
         window.open(
           `https://twitter.com/intent/tweet?text=${text}`,
           '_blank',
@@ -36,7 +41,7 @@ export function ShareMenu({
       icon: MessageCircle,
       color: 'hover:text-green-400',
       action: () => {
-        const text = encodeURIComponent(`${memeTitle}\n${memeUrl}`);
+        const text = encodeURIComponent(`${resolvedTitle}\n${resolvedUrl}`);
         window.open(
           `https://wa.me/?text=${text}`,
           '_blank'
@@ -46,12 +51,11 @@ export function ShareMenu({
     },
     {
       name: 'Reddit',
-      icon: Reddit,
+      icon: Globe,
       color: 'hover:text-orange-500',
       action: () => {
-        const text = encodeURIComponent(`${memeTitle}\n${memeUrl}`);
         window.open(
-          `https://www.reddit.com/submit?title=${encodeURIComponent(memeTitle)}&url=${memeUrl}`,
+          `https://www.reddit.com/submit?title=${encodeURIComponent(resolvedTitle)}&url=${resolvedUrl}`,
           '_blank'
         );
         onShare?.('reddit');
@@ -61,7 +65,7 @@ export function ShareMenu({
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(memeUrl);
+      await navigator.clipboard.writeText(resolvedUrl);
       setCopied(true);
       onShare?.('copy');
       setTimeout(() => setCopied(false), 2000);
@@ -74,6 +78,7 @@ export function ShareMenu({
     <div className="relative inline-block">
       {/* Share Button */}
       <motion.button
+        disabled={!resolvedUrl}
         onClick={() => setIsOpen(!isOpen)}
         className="btn-acid gap-2"
         whileHover={{ scale: 1.05 }}

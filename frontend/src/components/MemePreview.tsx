@@ -1,15 +1,23 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react';
-import { drawText, TextPosition, TextStyle } from '../lib/canvas';
+import { drawText } from '../lib/canvas';
+import type { TextPosition } from '../lib/canvas';
 
 export interface MemePreviewProps {
   templateImageUrl: string;
   texts: Array<{
     id: string;
     text: string;
-    position: TextPosition;
-    style: Partial<TextStyle>;
+    color?: string;
+    fontSize?: number;
+    uppercase?: boolean;
+    stroke?: boolean;
+    autoResize?: boolean;
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
   }>;
   onTextPositionUpdate?: (textId: string, newPosition: TextPosition) => void;
   isLocked?: boolean;
@@ -27,8 +35,13 @@ export function MemePreview({
 }: MemePreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [locked, setLocked] = useState(isLocked);
   const [draggedTextId, setDraggedTextId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setLocked(isLocked);
+  }, [isLocked]);
 
   // Redraw canvas whenever texts or template changes
   useEffect(() => {
@@ -48,23 +61,28 @@ export function MemePreview({
       // Draw all text overlays
       texts.forEach((textItem) => {
         const absPosition: TextPosition = {
-          x: (textItem.position.x / 100) * canvasWidth,
-          y: (textItem.position.y / 100) * canvasHeight,
-          width: (textItem.position.width / 100) * canvasWidth,
-          height: (textItem.position.height / 100) * canvasHeight,
+          x: (textItem.x / 100) * canvasWidth,
+          y: (textItem.y / 100) * canvasHeight,
+          width: ((textItem.width || 40) / 100) * canvasWidth,
+          height: ((textItem.height || 20) / 100) * canvasHeight,
         };
 
         drawText(
           ctx,
           textItem.text,
           absPosition,
-          textItem.style,
+          {
+            color: textItem.color,
+            fontSize: textItem.fontSize,
+            uppercase: textItem.uppercase,
+            stroke: textItem.stroke,
+          },
           canvasWidth,
           canvasHeight
         );
 
         // Draw selection border if dragging
-        if (draggedTextId === textItem.id && !isLocked) {
+        if (draggedTextId === textItem.id && !locked) {
           ctx.strokeStyle = '#9eff00';
           ctx.lineWidth = 3;
           ctx.strokeRect(absPosition.x, absPosition.y, absPosition.width, absPosition.height);
@@ -81,10 +99,10 @@ export function MemePreview({
     };
 
     img.src = templateImageUrl;
-  }, [texts, templateImageUrl, canvasWidth, canvasHeight, draggedTextId, isLocked]);
+  }, [texts, templateImageUrl, canvasWidth, canvasHeight, draggedTextId, locked]);
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isLocked) return;
+    if (locked) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -96,10 +114,10 @@ export function MemePreview({
     // Check if clicked on any text region
     for (const textItem of texts) {
       const absPosition: TextPosition = {
-        x: (textItem.position.x / 100) * canvasWidth,
-        y: (textItem.position.y / 100) * canvasHeight,
-        width: (textItem.position.width / 100) * canvasWidth,
-        height: (textItem.position.height / 100) * canvasHeight,
+        x: (textItem.x / 100) * canvasWidth,
+        y: (textItem.y / 100) * canvasHeight,
+        width: ((textItem.width || 40) / 100) * canvasWidth,
+        height: ((textItem.height || 20) / 100) * canvasHeight,
       };
 
       if (
@@ -117,7 +135,7 @@ export function MemePreview({
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || !draggedTextId || isLocked) return;
+    if (!isDragging || !draggedTextId || locked) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -133,17 +151,18 @@ export function MemePreview({
     if (!textItem) return;
 
     // Calculate new percentage position
-    const newX = textItem.position.x + (deltaX / canvasWidth) * 100;
-    const newY = textItem.position.y + (deltaY / canvasHeight) * 100;
+    const newX = textItem.x + (deltaX / canvasWidth) * 100;
+    const newY = textItem.y + (deltaY / canvasHeight) * 100;
 
     // Clamp to canvas bounds
-    const clampedX = Math.max(0, Math.min(newX, 100 - textItem.position.width));
-    const clampedY = Math.max(0, Math.min(newY, 100 - textItem.position.height));
+    const clampedX = Math.max(0, Math.min(newX, 100 - (textItem.width || 40)));
+    const clampedY = Math.max(0, Math.min(newY, 100 - (textItem.height || 20)));
 
     onTextPositionUpdate?.(draggedTextId, {
-      ...textItem.position,
       x: clampedX,
       y: clampedY,
+      width: textItem.width || 40,
+      height: textItem.height || 20,
     });
 
     setDragStart({ x: currentX, y: currentY });
@@ -159,14 +178,20 @@ export function MemePreview({
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">Preview</h3>
         <div className="flex items-center gap-2">
-          {isLocked ? (
+          {locked ? (
             <Lock size={16} className="text-acid" />
           ) : (
             <Unlock size={16} className="text-secondary" />
           )}
           <span className="text-sm text-secondary">
-            {isLocked ? 'Layout locked' : 'Drag text to reposition'}
+            {locked ? 'Layout locked' : 'Drag text to reposition'}
           </span>
+          <button
+            onClick={() => setLocked((prev) => !prev)}
+            className="btn-ghost py-1 px-2 text-xs"
+          >
+            {locked ? 'Unlock' : 'Lock'}
+          </button>
         </div>
       </div>
 
@@ -177,7 +202,7 @@ export function MemePreview({
         wheel={{ step: 0.1 }}
         pinch={{ step: 5 }}
       >
-        {({ zoomIn, zoomOut, resetTransform }) => (
+        {({ zoomIn, zoomOut, resetTransform }: { zoomIn: () => void; zoomOut: () => void; resetTransform: () => void }) => (
           <>
             <div className="relative bg-surface-2 rounded-lg overflow-hidden mb-4 border border-border">
               <TransformComponent

@@ -46,6 +46,7 @@ class TemplateResponse(BaseModel):
     text_coordinates: List[List[int]]
     preview_image_url: Optional[str]
     font_path: str
+    usage_instructions: Optional[str] = None
 
 
 @router.post("/generate", response_model=GenerateMemeResponse)
@@ -254,7 +255,8 @@ async def get_templates(
             text_field_count=template.number_of_text_fields,
             text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
             preview_image_url=template.preview_image_url or template.image_url,
-            font_path=template.font_path
+            font_path=template.font_path,
+            usage_instructions=template.usage_instructions,
         )
         for template in templates
     ]
@@ -280,7 +282,8 @@ async def get_template(
         text_field_count=template.number_of_text_fields,
         text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
         preview_image_url=template.preview_image_url or template.image_url,
-        font_path=template.font_path
+        font_path=template.font_path,
+        usage_instructions=template.usage_instructions,
     )
 
 
