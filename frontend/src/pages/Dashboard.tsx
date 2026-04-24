@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Key, Copy, Check, Eye, EyeOff, ExternalLink,
-  Zap, Trash2, BarChart2, User as UserIcon,
+  Zap, Trash2, BarChart2, User as UserIcon, LogOut,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -17,7 +17,7 @@ import { apiClient } from "../lib/api";
 async function fetchUserData(token?: string) {
   try {
     const [user, memesResponse] = await Promise.all([
-      apiClient.getCurrentUser(token),
+      apiClient.getUserMe(token),
       apiClient.getMemes({ user: "me", page: 1, limit: 40 }),
     ]);
 
@@ -40,7 +40,7 @@ export function Dashboard() {
   const [keyVisible, setKeyVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const { token: backendToken, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { token: backendToken, isAuthenticated, isLoading: authLoading, logout } = useAuth();
 
   useEffect(() => {
     const loadData = async () => {
@@ -152,11 +152,15 @@ export function Dashboard() {
           </div>
         </div>
         <Link
-          to="/"
+          to="/synthesize"
           className="px-4 py-2 btn-acid text-sm"
         >
           Create Meme
         </Link>
+        <button onClick={logout} className="btn-ghost text-sm">
+          <LogOut size={14} />
+          Logout
+        </button>
       </section>
       {/* ── Overview stats ─────────────────────────────────────────────────── */}
       <section id="overview">

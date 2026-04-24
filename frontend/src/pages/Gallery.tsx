@@ -1,26 +1,36 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { MemeCard } from "../components/MemeCard";
 import type { GeneratedMeme } from "../lib/types";
-import { Loader2, Flame, Clock, Search, Zap } from "lucide-react";
+import { Loader2, Flame, Clock, Search, Zap, User, Globe } from "lucide-react";
 import { apiClient } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type SortMode = "recent" | "top" | "trending";
 type ViewMode = "all" | "my";
 
 const PAGE_SIZE = 20;
 
-async function fetchMemes(page: number, sort: SortMode, userOnly: boolean = false): Promise<{ memes: GeneratedMeme[]; total: number }> {
+async function fetchMemes(page: number, sort: SortMode, userOnly: boolean = false): Promise<{ memes: GeneratedMeme[]; total: number; hasMore: boolean }> {
   try {
-    const params: any = { page, limit: PAGE_SIZE, sort };
     if (userOnly) {
-      params.user = 'me';
+      const response = await fetch(`/api/memes/my?page=${page}&limit=${PAGE_SIZE}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+        },
+      });
+      if (!response.ok) throw new Error("Failed to fetch user memes");
+      const myMemes = (await response.json()) as GeneratedMeme[];
+      return {
+        memes: myMemes,
+        total: page * PAGE_SIZE + myMemes.length,
+        hasMore: myMemes.length === PAGE_SIZE,
+      };
     }
-    
-    const data = await apiClient.getMemes(params);
-    
-    return { 
-      memes: data.memes || [], 
-      total: data.total || 0
+    const data = await apiClient.getMemes({ page, limit: PAGE_SIZE, sort });
+    return {
+      memes: data.memes || [],
+      total: data.total || 0,
+      hasMore: Boolean(data.has_more),
     };
   } catch (err) {
     console.error("Failed to load memes:", err);
@@ -30,7 +40,7 @@ async function fetchMemes(page: number, sort: SortMode, userOnly: boolean = fals
 
 export function Gallery() {
   const [sort, setSort] = useState<SortMode>("recent");
-  const [viewMode] = useState<ViewMode>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [search, setSearch] = useState("");
   const [memes, setMemes] = useState<GeneratedMeme[]>([]);
   const [page, setPage] = useState(1);
@@ -38,8 +48,9 @@ export function Gallery() {
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
   const loaderRef = useRef<HTMLDivElement>(null);
-  const hasMore = memes.length < total || total === 0;
+  const { isAuthenticated } = useAuth();
 
   const loadPage = useCallback(
     async (pageNum: number, reset: boolean) => {
@@ -49,6 +60,7 @@ export function Gallery() {
         const data = await fetchMemes(pageNum, sort, viewMode === "my");
         setMemes((prev) => (reset ? data.memes : [...prev, ...data.memes]));
         setTotal(data.total);
+        setHasMore(data.hasMore);
         setPage(pageNum);
       } catch (e) {
         setError("Couldn't load memes. Please try again.");
@@ -109,6 +121,23 @@ export function Gallery() {
 
         {/* ── Controls ─────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-1 glass-card p-1 border-border/40 !p-1 !rounded-lg">
+            <button
+              onClick={() => setViewMode("all")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${viewMode === "all" ? "bg-acid text-black font-medium" : "text-secondary hover:text-acid"}`}
+            >
+              <Globe size={12} />
+              All
+            </button>
+            <button
+              onClick={() => setViewMode("my")}
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${viewMode === "my" ? "bg-acid text-black font-medium" : "text-secondary hover:text-acid"} disabled:opacity-40`}
+            >
+              <User size={12} />
+              My
+            </button>
+          </div>
           {/* Sort tabs */}
           <div className="flex items-center gap-1 glass-card p-1 border-border/40 !p-1 !rounded-lg">
             {sortTabs.map(({ id, label, Icon }) => (

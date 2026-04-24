@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Wand2, LayoutDashboard, Image, LogIn, LogOut } from 'lucide-react';
+import { Menu, X, Home, Wand2, LayoutDashboard, Image, LogIn, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
 
   const navItems = [
-    { label: 'Generate', path: '/', icon: Wand2 },
+    { label: 'Home', path: '/', icon: Home },
+    { label: 'Synthesize', path: '/synthesize', icon: Wand2 },
     { label: 'Gallery', path: '/gallery', icon: Image },
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, protected: true },
   ];
@@ -50,22 +52,32 @@ export function Header() {
           {/* Auth / Profile */}
           <div className="hidden md:flex items-center gap-4 border-l border-border/50 pl-6 ml-6">
             {isAuthenticated ? (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-button border-border/50 hover:border-border transition-all duration-300">
+              <div className="relative">
+                <button
+                  onClick={() => setProfileOpen((prev) => !prev)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-button border-border/50 hover:border-border transition-all duration-300"
+                >
                   {user?.avatar_url ? (
                     <img src={user.avatar_url} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
                   ) : (
                     <div className="w-6 h-6 rounded-full bg-gradient-to-br from-acid/50 to-acid/30" />
                   )}
                   <span className="text-xs font-medium pr-1">{user?.name || user?.email.split('@')[0]}</span>
-                </div>
-                <button 
-                  onClick={logout}
-                  className="p-2 text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-300"
-                  title="Sign Out"
-                >
-                  <LogOut size={18} />
+                  <ChevronDown size={14} className="text-muted" />
                 </button>
+                {profileOpen && (
+                  <div className="absolute right-0 mt-2 w-44 rounded-lg border border-border bg-surface p-2 z-50">
+                    <Link to="/dashboard" className="block px-3 py-2 text-sm rounded hover:bg-surface-2" onClick={() => setProfileOpen(false)}>
+                      Dashboard
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="w-full text-left px-3 py-2 text-sm rounded hover:bg-red-500/10 text-red-400"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <button 

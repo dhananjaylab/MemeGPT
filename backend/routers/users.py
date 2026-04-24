@@ -10,6 +10,24 @@ from services.auth import get_current_user
 
 router = APIRouter()
 
+@router.get("/me")
+async def get_user_me(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Get current user profile"""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.email.split("@")[0],
+        "avatar_url": None,
+        "plan": current_user.plan,
+        "daily_limit": current_user.daily_limit,
+        "daily_used": current_user.daily_used,
+        "api_key": current_user.api_key,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else "",
+        "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else "",
+    }
+
 
 @router.get("/stats")
 async def get_user_stats(

@@ -168,6 +168,12 @@ class APIClient {
     });
   }
 
+  async getUserMe(token?: string): Promise<User> {
+    return this.request<User>('/users/me', {
+      headers: this.getAuthHeaders(token),
+    });
+  }
+
   async updateUser(updates: Partial<User>, token?: string): Promise<User> {
     return this.request<User>('/auth/me', {
       method: 'PATCH',
