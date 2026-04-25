@@ -62,6 +62,7 @@ Before you begin, ensure you have the following installed:
 #### API Keys Required
 
 - **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/)
+- **Gemini API Key** - Get from [Google AI Studio](https://aistudio.google.com/)
 - **Stripe API Key** (optional) - Get from [Stripe Dashboard](https://dashboard.stripe.com)
 - **Cloudflare R2 Credentials** (optional) - Get from [Cloudflare Dashboard](https://dash.cloudflare.com)
 
@@ -101,6 +102,8 @@ REDIS_URL=redis://localhost:6379
 
 # ─── API Keys ───
 OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+AI_PROVIDER=openai  # Options: openai, gemini, both
 STRIPE_SECRET_KEY=your_stripe_secret_key_here
 STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key_here
 
@@ -272,7 +275,9 @@ For comprehensive API documentation, see [API_DOCUMENTATION.md](./API_DOCUMENTAT
 |----------|----------|-------------|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string |
 | `REDIS_URL` | ✅ | Redis connection string |
-| `OPENAI_API_KEY` | ✅ | OpenAI API key for GPT models |
+| `OPENAI_API_KEY` | ❌*| OpenAI API key for GPT models (*either OpenAI or Gemini required) |
+| `GEMINI_API_KEY` | ❌*| Google Gemini API key (*either OpenAI or Gemini required) |
+| `AI_PROVIDER` | ❌ | AI model provider to use (`openai`, `gemini`, or `both`) |
 | `SECRET_KEY` | ✅ | JWT signing key (change in production!) |
 | `CORS_ORIGINS` | ✅ | Allowed frontend origins |
 | `STRIPE_SECRET_KEY` | ❌ | Stripe API key (optional) |
