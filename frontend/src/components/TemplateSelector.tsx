@@ -65,7 +65,7 @@ export function TemplateSelector({
   }, [searchQuery, templates]);
 
   return (
-    <div className="card-dark">
+    <div className="glass-card border border-border p-6 rounded-xl">
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-4">Meme Templates</h3>
 

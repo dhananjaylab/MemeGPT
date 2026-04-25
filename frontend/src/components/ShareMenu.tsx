@@ -80,12 +80,13 @@ export function ShareMenu({
       <motion.button
         disabled={!resolvedUrl}
         onClick={() => setIsOpen(!isOpen)}
-        className="btn-acid gap-2"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        className="p-2 rounded-full bg-black/40 text-white hover:bg-acid/20 hover:text-acid backdrop-blur-sm transition-all duration-200 disabled:opacity-40"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        title="Share"
+        aria-label="Share meme"
       >
         <Share2 size={16} />
-        Share
       </motion.button>
 
       {/* Share Menu Dropdown */}

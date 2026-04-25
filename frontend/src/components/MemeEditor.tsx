@@ -36,7 +36,7 @@ export function MemeEditor({
 
   if (!selectedText) {
     return (
-      <div className="card-dark">
+      <div className="glass-card border border-border p-6 rounded-xl">
         <p className="text-secondary">No text fields available</p>
       </div>
     );
@@ -74,7 +74,7 @@ export function MemeEditor({
   };
 
   return (
-    <div className="card-dark space-y-6">
+    <div className="glass-card border border-border p-6 rounded-xl space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Text Editor</h3>
 

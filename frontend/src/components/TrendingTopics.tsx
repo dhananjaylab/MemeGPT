@@ -61,7 +61,7 @@ export function TrendingTopics({
 
   if (isLoading) {
     return (
-      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+      <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
         <div className="flex items-center justify-center py-8">
           <div className="w-6 h-6 border-2 border-acid border-t-transparent rounded-full animate-spin" />
         </div>
@@ -71,7 +71,7 @@ export function TrendingTopics({
 
   if (error) {
     return (
-      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+      <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
         <p className="text-red-500 text-sm">{error}</p>
       </div>
     );
@@ -79,7 +79,7 @@ export function TrendingTopics({
 
   if (topics.length === 0) {
     return (
-      <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+      <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
         <p className="text-secondary text-sm text-center py-8">No trending topics</p>
       </div>
     );
@@ -89,7 +89,7 @@ export function TrendingTopics({
   const currentTopic = topics[currentIndex];
 
   return (
-    <div className={`card-dark ${variant === 'inline' ? 'w-full' : ''}`}>
+    <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold flex items-center gap-2">
           <TrendingUp size={18} className="text-acid" />

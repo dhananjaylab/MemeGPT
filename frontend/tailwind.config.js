@@ -36,6 +36,7 @@ export default {
         'acid-lg': '0 0 40px rgba(176, 255, 0, 0.3)',
         'glass': '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05)',
         'glass-lg': '0 12px 48px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+        'glass-xl': '0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.12)',
       },
       backdropBlur: {
         'xs': '2px',

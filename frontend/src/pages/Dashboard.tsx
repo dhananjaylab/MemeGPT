@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   Key, Copy, Check, Eye, EyeOff, ExternalLink,
@@ -7,6 +8,7 @@ import {
 import { toast } from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { ShareMenu } from "../components/ShareMenu";
+import { PageTransition, staggerChild } from "../components/PageTransition";
 import type { GeneratedMeme, User } from "../lib/types";
 import { apiClient } from "../lib/api";
 
@@ -125,9 +127,10 @@ export function Dashboard() {
   const plan = user?.plan ?? "free";
 
   return (
+    <PageTransition>
     <div className="space-y-10">
       {/* ── Profile Header ────────────────────────────────────────────────── */}
-      <section className="glass-card border border-border rounded-xl p-6 flex items-center gap-6">
+      <motion.section variants={staggerChild} className="glass-card border border-border rounded-xl p-4 md:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-6">
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-acid/30 to-purple-500/30 border border-acid/50 flex items-center justify-center flex-shrink-0">
           {user?.avatar_url ? (
             <img src={user.avatar_url} alt={user?.name} className="w-full h-full rounded-full object-cover" />
@@ -151,17 +154,16 @@ export function Dashboard() {
             </span>
           </div>
         </div>
-        <Link
-          to="/synthesize"
-          className="px-4 py-2 btn-acid text-sm"
-        >
-          Create Meme
-        </Link>
-        <button onClick={logout} className="btn-ghost text-sm">
-          <LogOut size={14} />
-          Logout
-        </button>
-      </section>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <Link to="/synthesize" className="btn-acid text-xs md:text-sm px-4 py-2">
+            Create Meme
+          </Link>
+          <button onClick={logout} className="btn-ghost text-xs md:text-sm">
+            <LogOut size={14} />
+            Logout
+          </button>
+        </div>
+      </motion.section>
       {/* ── Overview stats ─────────────────────────────────────────────────── */}
       <section id="overview">
         <SectionHeading icon={BarChart2} label="Overview" />
@@ -360,6 +362,7 @@ export function Dashboard() {
         </section>
       )}
     </div>
+    </PageTransition>
   );
 }
 

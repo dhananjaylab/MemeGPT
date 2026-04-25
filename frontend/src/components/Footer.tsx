@@ -5,7 +5,7 @@ import { Wand2, Mail, ArrowRight } from 'lucide-react';
 export function Footer() {
   return (
     <footer className="border-t border-border/50 backdrop-blur-xl bg-background/60" style={{backgroundImage: 'linear-gradient(180deg, transparent 0%, rgba(176, 255, 0, 0.02) 100%)'}}>
-      <div className="container mx-auto px-4 max-w-7xl">
+      <div className="page-container">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 py-12">
           {/* Brand */}
           <div className="md:col-span-2 space-y-4">
