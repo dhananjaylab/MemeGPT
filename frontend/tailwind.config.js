@@ -20,8 +20,8 @@ export default {
           DEFAULT: 'var(--border)',
           light: 'var(--border-light)',
         },
-        acid: 'var(--acid)',
-        'acid-dark': 'var(--acid-dark)',
+        acid: '#B0FF00',
+        'acid-dark': '#8FCC00',
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],

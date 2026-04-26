@@ -88,7 +88,7 @@ body {
     @apply bg-transparent border-2 border-acid text-acid font-bold px-6 py-2.5 rounded-lg transition-all duration-200 flex items-center justify-center gap-2;
   }
   .btn-acid-outline:hover {
-    @apply bg-acid/10 -translate-y-0.5;
+    @apply bg-[#B0FF00]/10 -translate-y-0.5;
     box-shadow: var(--glow-sm);
   }
 
@@ -127,12 +127,12 @@ body {
 
   /* ── Inputs ───────────────────────────────────────────────────────────── */
   .input-dark {
-    @apply bg-surface-2 border border-border rounded-lg px-4 py-3 text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-acid/20 focus:border-acid/40 transition-all;
+    @apply bg-surface-2 border border-border rounded-lg px-4 py-3 text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-[#B0FF00]/20 focus:border-[#B0FF00]/40 transition-all;
   }
 
   /* ── Badges ───────────────────────────────────────────────────────────── */
   .badge-acid {
-    @apply bg-acid/10 text-acid text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-acid/20;
+    @apply bg-[#B0FF00]/10 text-acid text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-[#B0FF00]/20;
   }
   .badge-dim {
     @apply bg-surface-3 text-secondary text-[10px] uppercase tracking-wider font-mono px-2 py-0.5 rounded border border-border;
