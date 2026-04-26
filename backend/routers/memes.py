@@ -1,0 +1,356 @@
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+
+from db.session import get_db
+from models.models import GeneratedMeme, User, MemeTemplate
+from services.auth import get_current_user_optional
+from services.rate_limit import rate_limit_request
+from workers.meme_worker import process_meme_generation
+from services.worker import enqueue_meme_generation
+
+router = APIRouter()
+
+
+class GenerateMemeRequest(BaseModel):
+    prompt: str
+    ai_provider: Optional[str] = "openai"  # "openai" or "gemini"
+    generation_mode: Optional[str] = "auto"  # "auto" or "manual"
+    template_id: Optional[int] = None
+    captions: Optional[List[str]] = None
+
+
+class GenerateMemeResponse(BaseModel):
+    job_id: str
+    remaining_generations: int
+
+
+class MemeResponse(BaseModel):
+    id: str
+    template_name: str
+    template_id: int
+    meme_text: List[str]
+    image_url: str
+    created_at: str
+    share_count: int
+    like_count: int
+
+
+class TemplateResponse(BaseModel):
+    id: int
+    name: str
+    image_url: Optional[str]
+    text_field_count: int
+    text_coordinates: List[List[int]]
+    preview_image_url: Optional[str]
+    font_path: str
+    usage_instructions: Optional[str] = None
+
+
+@router.post("/generate", response_model=GenerateMemeResponse)
+async def generate_meme(
+    request: Request,
+    body: GenerateMemeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Generate memes from user prompt (async with job queue)"""
+    
+    # Rate limit check is now handled by middleware
+    remaining = getattr(request.state, "rate_limit_remaining", 0)
+    
+    # Validate prompt
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    
+    if len(body.prompt) > 1000:
+        raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
+    
+    # Normalize ai_provider
+    ai_provider = (body.ai_provider or "openai").lower()
+    if ai_provider not in {"openai", "gemini"}:
+        raise HTTPException(status_code=400, detail="ai_provider must be 'openai' or 'gemini'")
+
+    # Normalize generation mode
+    generation_mode = (body.generation_mode or "auto").lower()
+    if generation_mode not in {"auto", "manual"}:
+        raise HTTPException(status_code=400, detail="generation_mode must be 'auto' or 'manual'")
+
+    if generation_mode == "manual":
+        if body.template_id is None:
+            raise HTTPException(status_code=400, detail="template_id is required for manual mode")
+        if not body.captions or not any(c.strip() for c in body.captions):
+            raise HTTPException(status_code=400, detail="captions are required for manual mode")
+    
+    # Enqueue meme generation job with specified AI provider
+    job_id = await enqueue_meme_generation(
+        prompt=body.prompt,
+        user=current_user,
+        ai_provider=ai_provider,
+        generation_mode=generation_mode,
+        manual_template_id=body.template_id,
+        manual_captions=body.captions,
+    )
+    
+    return GenerateMemeResponse(
+        job_id=job_id,
+        remaining_generations=remaining
+    )
+
+
+@router.get("/public", response_model=List[MemeResponse])
+async def get_public_memes(
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "recent",  # "recent", "top", "trending"
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get public memes for gallery"""
+    
+    # Validate pagination
+    if page < 1:
+        page = 1
+    if limit > 100:
+        limit = 100
+    
+    offset = (page - 1) * limit
+    
+    # Build query
+    query = select(GeneratedMeme).where(GeneratedMeme.is_public == True)
+    
+    # Add search filter
+    if search:
+        search_term = f"%{search}%"
+        query = query.where(
+            GeneratedMeme.prompt.ilike(search_term) |
+            GeneratedMeme.template_name.ilike(search_term)
+        )
+    
+    # Add sorting
+    if sort == "top":
+        query = query.order_by(desc(GeneratedMeme.share_count))
+    elif sort == "trending":
+        # Simple trending: high share count + recent
+        query = query.order_by(
+            desc(GeneratedMeme.share_count * 0.7 + GeneratedMeme.created_at.timestamp() * 0.3)
+        )
+    else:  # recent
+        query = query.order_by(desc(GeneratedMeme.created_at))
+    
+    # Apply pagination
+    query = query.offset(offset).limit(limit)
+    
+    result = await db.execute(query)
+    memes = result.scalars().all()
+    
+    return [
+        MemeResponse(
+            id=meme.id,
+            template_name=meme.template_name,
+            template_id=meme.template_id,
+            meme_text=meme.meme_text,
+            image_url=meme.image_url,
+            created_at=meme.created_at.isoformat(),
+            share_count=meme.share_count,
+            like_count=meme.like_count
+        )
+        for meme in memes
+    ]
+
+
+@router.get("/my", response_model=List[MemeResponse])
+async def get_my_memes(
+    page: int = 1,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional)
+):
+    """Get current user's memes"""
+    
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Validate pagination
+    if page < 1:
+        page = 1
+    if limit > 100:
+        limit = 100
+    
+    offset = (page - 1) * limit
+    
+    # Get user's memes
+    query = (
+        select(GeneratedMeme)
+        .where(GeneratedMeme.user_id == current_user.id)
+        .order_by(desc(GeneratedMeme.created_at))
+        .offset(offset)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    memes = result.scalars().all()
+    
+    return [
+        MemeResponse(
+            id=meme.id,
+            template_name=meme.template_name,
+            template_id=meme.template_id,
+            meme_text=meme.meme_text,
+            image_url=meme.image_url,
+            created_at=meme.created_at.isoformat(),
+            share_count=meme.share_count,
+            like_count=meme.like_count
+        )
+        for meme in memes
+    ]
+
+
+@router.get("/{meme_id}", response_model=MemeResponse)
+async def get_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific meme by ID"""
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    if not meme.is_public:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    return MemeResponse(
+        id=meme.id,
+        template_name=meme.template_name,
+        template_id=meme.template_id,
+        meme_text=meme.meme_text,
+        image_url=meme.image_url,
+        created_at=meme.created_at.isoformat(),
+        share_count=meme.share_count,
+        like_count=meme.like_count
+    )
+
+
+# Template Management Endpoints
+
+@router.get("/templates", response_model=List[TemplateResponse])
+async def get_templates(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all available meme templates for AI suggestions and manual editor"""
+    
+    result = await db.execute(select(MemeTemplate))
+    templates = result.scalars().all()
+    
+    return [
+        TemplateResponse(
+            id=template.id,
+            name=template.name,
+            image_url=template.image_url,
+            text_field_count=template.number_of_text_fields,
+            text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+            preview_image_url=template.preview_image_url or template.image_url,
+            font_path=template.font_path,
+            usage_instructions=template.usage_instructions,
+        )
+        for template in templates
+    ]
+
+
+@router.get("/templates/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific meme template details"""
+    
+    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return TemplateResponse(
+        id=template.id,
+        name=template.name,
+        image_url=template.image_url,
+        text_field_count=template.number_of_text_fields,
+        text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+        preview_image_url=template.preview_image_url or template.image_url,
+        font_path=template.font_path,
+        usage_instructions=template.usage_instructions,
+    )
+
+
+@router.post("/{meme_id}/share")
+async def share_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Increment share count for a meme"""
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    if not meme.is_public:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    # Increment share count
+    meme.share_count += 1
+    await db.commit()
+    
+    return {"message": "Share count updated", "share_count": meme.share_count}
+
+
+@router.post("/{meme_id}/like")
+async def like_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Increment like count for a meme"""
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    # Increment like count
+    meme.like_count += 1
+    await db.commit()
+    
+    return {"message": "Liked", "liked": True, "like_count": meme.like_count}
+
+
+@router.delete("/{meme_id}")
+async def delete_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional)
+):
+    """Delete a meme (only by owner)"""
+    
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    if meme.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this meme")
+    
+    await db.delete(meme)
+    await db.commit()
+    
+    return {"message": "Meme deleted successfully"}

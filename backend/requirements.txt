@@ -1,0 +1,74 @@
+# FastAPI and ASGI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+gunicorn==21.2.0
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Redis and job queue
+redis==5.0.1
+arq==0.25.0
+
+# AI and image processing
+openai==1.3.7
+anthropic==0.7.8
+google-generativeai==0.3.0
+pillow==10.1.0
+requests==2.31.0
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Environment and configuration
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP client
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Cloud storage
+boto3==1.34.0
+cloudflare==2.11.1
+
+# Monitoring and logging
+structlog==23.2.0
+sentry-sdk[fastapi]==1.38.0
+psutil==5.9.6
+
+# Data validation and parsing
+email-validator==2.1.0
+python-dateutil==2.8.2
+
+# Stripe for payments
+stripe==7.8.0
+
+# News and social APIs
+praw==7.7.1  # Reddit API
+newsapi-python==0.2.7
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+faker==20.1.0
+
+# CORS and middleware
+# CORS is handled by FastAPI's built-in CORSMiddleware
+
+# Rate limiting
+slowapi==0.1.9
+
+# Background tasks
+celery==5.3.4  # Alternative to ARQ if needed
+
+# Utilities
+python-slugify==8.0.1
+pytz==2023.3
