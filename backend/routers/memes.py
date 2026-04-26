@@ -11,6 +11,7 @@ from services.auth import get_current_user_optional
 from services.rate_limit import rate_limit_request
 from workers.meme_worker import process_meme_generation
 from services.worker import enqueue_meme_generation
+from services.imgflip import imgflip_service
 
 import json
 from pathlib import Path
@@ -51,6 +52,8 @@ class TemplateResponse(BaseModel):
     preview_image_url: Optional[str]
     font_path: str
     usage_instructions: Optional[str] = None
+    source: Optional[str] = "local"  # "local" or "imgflip"
+    imgflip_id: Optional[str] = None
 
 
 @router.post("/generate", response_model=GenerateMemeResponse)
@@ -229,11 +232,17 @@ async def get_my_memes(
 
 @router.get("/templates", response_model=List[TemplateResponse])
 async def get_templates(
+    source: Optional[str] = None,  # "all", "local", or "imgflip"
     db: AsyncSession = Depends(get_db)
 ):
     """Get all available meme templates for AI suggestions and manual editor"""
     
-    result = await db.execute(select(MemeTemplate))
+    # Build query with optional source filter
+    query = select(MemeTemplate)
+    if source and source != "all":
+        query = query.where(MemeTemplate.source == source)
+    
+    result = await db.execute(query)
     templates = result.scalars().all()
     
     return [
@@ -246,9 +255,36 @@ async def get_templates(
             preview_image_url=template.preview_image_url or template.image_url,
             font_path=template.font_path,
             usage_instructions=template.usage_instructions,
+            source=template.source,
+            imgflip_id=template.imgflip_id,
         )
         for template in templates
     ]
+
+
+@router.post("/templates/sync-imgflip")
+async def sync_imgflip_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Sync popular meme templates from Imgflip API to database.
+    This endpoint fetches the top 100 templates and caches them.
+    """
+    try:
+        # Perform sync
+        stats = await imgflip_service.sync_templates_to_db(db)
+        
+        return {
+            "success": True,
+            "message": f"Successfully synced Imgflip templates",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to sync Imgflip templates: {str(e)}"
+        )
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
@@ -273,6 +309,8 @@ async def get_template(
         preview_image_url=template.preview_image_url or template.image_url,
         font_path=template.font_path,
         usage_instructions=template.usage_instructions,
+        source=template.source,
+        imgflip_id=template.imgflip_id,
     )
 
 

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ai_provider: str = Field(default="openai", alias="AI_PROVIDER")  # "openai", "gemini", or "both"
     
+    # Imgflip API
+    imgflip_username: str = ""
+    imgflip_password: str = ""
+    
     # Frontend
     frontend_url: str = "http://localhost:3000"
     

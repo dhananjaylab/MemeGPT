@@ -43,7 +43,9 @@ export function MemeEditor({
   }
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onTextUpdate?.(selectedTextId!, e.target.value);
+    if (selectedTextId && onTextUpdate) {
+      onTextUpdate(selectedTextId, e.target.value);
+    }
   };
 
   const handleColorChange = (color: string) => {
