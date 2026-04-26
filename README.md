@@ -386,3 +386,5 @@ For issues, questions, or feedback:
 ---
 
 **Happy Meme Generation! 🎉**   
+
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/dhananjaylab/MemeGPT?utm_source=oss&utm_medium=github&utm_campaign=dhananjaylab%2FMemeGPT&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
