@@ -368,8 +368,3 @@ for i in {1..20}; do
 done
 ```
 
-## References
-
-- [Token Bucket Algorithm](https://en.wikipedia.org/wiki/Token_bucket)
-- [Redis Rate Limiting Patterns](https://redis.io/commands/incr)
-- [HTTP 429 Too Many Requests](https://tools.ietf.org/html/rfc6585#section-4)
