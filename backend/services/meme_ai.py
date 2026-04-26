@@ -123,7 +123,6 @@ async def generate_meme_captions_with_gemini(user_prompt: str) -> Optional[List[
             model_name="gemini-1.5-flash",
             system_instruction=system_message,
             generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
                 max_output_tokens=2048,
                 temperature=1.0,
             )

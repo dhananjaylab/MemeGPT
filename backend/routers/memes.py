@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -11,6 +12,9 @@ from services.rate_limit import rate_limit_request
 from workers.meme_worker import process_meme_generation
 from services.worker import enqueue_meme_generation
 
+import json
+from pathlib import Path
+import httpx
 router = APIRouter()
 
 
@@ -98,6 +102,18 @@ async def generate_meme(
         job_id=job_id,
         remaining_generations=remaining
     )
+
+
+@router.get("", response_model=List[MemeResponse])
+async def get_memes_alias(
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "recent",
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Alias for /public endpoint - Get public memes for gallery"""
+    return await get_public_memes(page, limit, sort, search, db)
 
 
 @router.get("/public", response_model=List[MemeResponse])
@@ -208,35 +224,8 @@ async def get_my_memes(
     ]
 
 
-@router.get("/{meme_id}", response_model=MemeResponse)
-async def get_meme(
-    meme_id: str,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get specific meme by ID"""
-    
-    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
-    meme = result.scalar_one_or_none()
-    
-    if not meme:
-        raise HTTPException(status_code=404, detail="Meme not found")
-    
-    if not meme.is_public:
-        raise HTTPException(status_code=404, detail="Meme not found")
-    
-    return MemeResponse(
-        id=meme.id,
-        template_name=meme.template_name,
-        template_id=meme.template_id,
-        meme_text=meme.meme_text,
-        image_url=meme.image_url,
-        created_at=meme.created_at.isoformat(),
-        share_count=meme.share_count,
-        like_count=meme.like_count
-    )
-
-
 # Template Management Endpoints
+# NOTE: These must come BEFORE /{meme_id} route to avoid path conflicts
 
 @router.get("/templates", response_model=List[TemplateResponse])
 async def get_templates(
@@ -284,6 +273,34 @@ async def get_template(
         preview_image_url=template.preview_image_url or template.image_url,
         font_path=template.font_path,
         usage_instructions=template.usage_instructions,
+    )
+
+
+@router.get("/{meme_id}", response_model=MemeResponse)
+async def get_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific meme by ID"""
+    
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    if not meme.is_public:
+        raise HTTPException(status_code=404, detail="Meme not found")
+    
+    return MemeResponse(
+        id=meme.id,
+        template_name=meme.template_name,
+        template_id=meme.template_id,
+        meme_text=meme.meme_text,
+        image_url=meme.image_url,
+        created_at=meme.created_at.isoformat(),
+        share_count=meme.share_count,
+        like_count=meme.like_count
     )
 
 
@@ -352,5 +369,116 @@ async def delete_meme(
     
     await db.delete(meme)
     await db.commit()
+
+
+@router.post("/seed-templates")
+async def seed_templates(db: AsyncSession = Depends(get_db)):
+    """Seed meme templates from meme_data.json with fallback images"""
+    
+    # Load meme data
+    meme_data_path = Path(__file__).parent.parent.parent / "public" / "meme_data.json"
+    
+    if not meme_data_path.exists():
+        raise HTTPException(status_code=500, detail="meme_data.json not found")
+    
+    with open(meme_data_path, 'r', encoding='utf-8') as f:
+        templates_data = json.load(f)
+    
+    # Fallback image URLs using imgflip API
+    fallback_images = {
+        0: "https://i.imgflip.com/30b1gx.jpg",  # Drake
+        1: "https://i.imgflip.com/1ur9b0.jpg",  # Distracted Boyfriend
+        2: "https://i.imgflip.com/22bdq6.jpg",  # Left Exit
+        3: "https://i.imgflip.com/26am.jpg",    # One Does Not Simply
+        4: "https://i.imgflip.com/1bij.jpg",    # Success Kid
+        5: "https://i.imgflip.com/1g8my4.jpg",  # Disaster Girl
+        6: "https://i.imgflip.com/gk5el.jpg",   # Hide the Pain Harold
+        7: "https://i.imgflip.com/1ihzfe.jpg",  # Surprised Pikachu
+        8: "https://i.imgflip.com/261o3j.jpg",  # Change My Mind
+        9: "https://i.imgflip.com/1c1uej.jpg",  # Leonardo Dicaprio Cheers
+        10: "https://i.imgflip.com/1otk96.jpg", # Trump Bill Signing
+    }
+    
+    added = 0
+    updated = 0
+    
+    for template_data in templates_data:
+        tid = template_data['id']
+        
+        # Check if exists
+        result = await db.execute(
+            select(MemeTemplate).where(MemeTemplate.id == tid)
+        )
+        existing = result.scalar_one_or_none()
+        
+        # Use fallback image
+        image_url = fallback_images.get(tid, f"https://i.imgflip.com/30b1gx.jpg")
+        
+        if existing:
+            # Update
+            existing.name = template_data['name']
+            existing.alternative_names = template_data.get('alternative_names', [])
+            existing.file_path = template_data['file_path']
+            existing.font_path = template_data['font_path']
+            existing.text_color = template_data['text_color']
+            existing.text_stroke = template_data.get('text_stroke', False)
+            existing.usage_instructions = template_data['usage_instructions']
+            existing.number_of_text_fields = template_data['number_of_text_fields']
+            existing.text_coordinates_xy_wh = template_data['text_coordinates_xy_wh']
+            existing.text_coordinates = template_data['text_coordinates_xy_wh']
+            existing.example_output = template_data['example_output']
+            existing.image_url = image_url
+            existing.preview_image_url = image_url
+            updated += 1
+        else:
+            # Create
+            template = MemeTemplate(
+                id=tid,
+                name=template_data['name'],
+                alternative_names=template_data.get('alternative_names', []),
+                file_path=template_data['file_path'],
+                font_path=template_data['font_path'],
+                text_color=template_data['text_color'],
+                text_stroke=template_data.get('text_stroke', False),
+                usage_instructions=template_data['usage_instructions'],
+                number_of_text_fields=template_data['number_of_text_fields'],
+                text_coordinates_xy_wh=template_data['text_coordinates_xy_wh'],
+                text_coordinates=template_data['text_coordinates_xy_wh'],
+                example_output=template_data['example_output'],
+                image_url=image_url,
+                preview_image_url=image_url
+            )
+            db.add(template)
+            added += 1
+    
+    await db.commit()
+    
+    return {
+        "message": "Templates seeded successfully",
+        "added": added,
+        "updated": updated,
+        "total": added + updated
+    }
     
     return {"message": "Meme deleted successfully"}
+
+
+@router.get("/proxy-image")
+async def proxy_template_image(url: str):
+    """Proxy external template images to avoid CORS issues"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            response.raise_for_status()
+            
+            # Return image with proper headers
+            return Response(
+                content=response.content,
+                media_type=response.headers.get("content-type", "image/jpeg"),
+                headers={
+                    "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+                    "Access-Control-Allow-Origin": "*",
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Failed to fetch image: {str(e)}")

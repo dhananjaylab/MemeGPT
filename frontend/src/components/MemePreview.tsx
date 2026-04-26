@@ -52,8 +52,9 @@ export function MemePreview({
     if (!ctx) return;
 
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-
+    // Don't set crossOrigin to avoid CORS issues with external CDN images
+    // We only need to display the image, not manipulate pixel data
+    
     img.onload = () => {
       // Draw base image
       ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
