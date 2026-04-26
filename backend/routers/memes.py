@@ -411,7 +411,7 @@ async def delete_meme(
 
 @router.post("/seed-templates")
 async def seed_templates(db: AsyncSession = Depends(get_db)):
-    """Seed meme templates from meme_data.json with fallback images"""
+    """Seed meme templates from meme_data.json with local files prioritized"""
     
     # Load meme data
     meme_data_path = Path(__file__).parent.parent.parent / "public" / "meme_data.json"
@@ -422,7 +422,7 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
     with open(meme_data_path, 'r', encoding='utf-8') as f:
         templates_data = json.load(f)
     
-    # Fallback image URLs using imgflip API
+    # Fallback image URLs using imgflip API (used only if local file doesn't exist)
     fallback_images = {
         0: "https://i.imgflip.com/30b1gx.jpg",  # Drake
         1: "https://i.imgflip.com/1ur9b0.jpg",  # Distracted Boyfriend
@@ -439,6 +439,7 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
     
     added = 0
     updated = 0
+    frames_dir = Path(__file__).parent.parent.parent / "public" / "frames"
     
     for template_data in templates_data:
         tid = template_data['id']
@@ -449,8 +450,17 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
         )
         existing = result.scalar_one_or_none()
         
-        # Use fallback image
-        image_url = fallback_images.get(tid, f"https://i.imgflip.com/30b1gx.jpg")
+        # Priority 1: Use local file if it exists
+        local_file_path = frames_dir / template_data['file_path']
+        if local_file_path.exists():
+            # Use local static file URL (served by FastAPI StaticFiles)
+            image_url = f"/frames/{template_data['file_path']}"
+            preview_url = image_url
+        else:
+            # Priority 2: Use external URL with proxy as fallback
+            external_url = fallback_images.get(tid, "https://i.imgflip.com/30b1gx.jpg")
+            image_url = f"/api/memes/proxy-image?url={external_url}"
+            preview_url = image_url
         
         if existing:
             # Update
@@ -466,7 +476,8 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
             existing.text_coordinates = template_data['text_coordinates_xy_wh']
             existing.example_output = template_data['example_output']
             existing.image_url = image_url
-            existing.preview_image_url = image_url
+            existing.preview_image_url = preview_url
+            existing.source = "local"
             updated += 1
         else:
             # Create
@@ -484,7 +495,8 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
                 text_coordinates=template_data['text_coordinates_xy_wh'],
                 example_output=template_data['example_output'],
                 image_url=image_url,
-                preview_image_url=image_url
+                preview_image_url=preview_url,
+                source="local"
             )
             db.add(template)
             added += 1
@@ -503,20 +515,52 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
 
 @router.get("/proxy-image")
 async def proxy_template_image(url: str):
-    """Proxy external template images to avoid CORS issues"""
+    """
+    Proxy external template images to avoid CORS issues.
+    This endpoint fetches images from external sources (like Imgflip)
+    and serves them with proper CORS headers.
+    """
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10.0)
-            response.raise_for_status()
-            
-            # Return image with proper headers
-            return Response(
-                content=response.content,
-                media_type=response.headers.get("content-type", "image/jpeg"),
+        # Validate URL to prevent abuse
+        if not url.startswith(('http://', 'https://')):
+            raise HTTPException(status_code=400, detail="Invalid URL scheme")
+        
+        # Fetch image from external source
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                url,
+                timeout=15.0,
                 headers={
-                    "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
-                    "Access-Control-Allow-Origin": "*",
+                    'User-Agent': 'MemeGPT/2.0 (Image Proxy)',
                 }
             )
+            response.raise_for_status()
+            
+            # Determine content type
+            content_type = response.headers.get("content-type", "image/jpeg")
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL does not point to an image")
+            
+            # Return image with proper CORS and caching headers
+            return Response(
+                content=response.content,
+                media_type=content_type,
+                headers={
+                    "Cache-Control": "public, max-age=86400, immutable",  # Cache for 24 hours
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "X-Content-Type-Options": "nosniff",
+                }
+            )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Failed to fetch image: HTTP {e.response.status_code}"
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Image fetch timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Failed to fetch image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")

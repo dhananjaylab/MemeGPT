@@ -66,11 +66,24 @@ async def seed_templates_if_needed():
             }
             
             added = 0
+            frames_dir = Path(__file__).parent.parent / "public" / "frames"
+            
             for template_data in templates_data:
                 tid = template_data['id']
-                external_url = fallback_images.get(tid, "https://i.imgflip.com/30b1gx.jpg")
-                # Use proxy endpoint to avoid CORS issues
-                image_url = f"/api/memes/proxy-image?url={external_url}"
+                
+                # Priority 1: Use local file if it exists
+                local_file_path = frames_dir / template_data['file_path']
+                if local_file_path.exists():
+                    # Use local static file URL (will be served by FastAPI StaticFiles)
+                    image_url = f"/frames/{template_data['file_path']}"
+                    preview_url = image_url
+                    print(f"  ✓ Template {tid} ({template_data['name']}): Using local file")
+                else:
+                    # Priority 2: Use external URL with proxy as fallback
+                    external_url = fallback_images.get(tid, "https://i.imgflip.com/30b1gx.jpg")
+                    image_url = f"/api/memes/proxy-image?url={external_url}"
+                    preview_url = image_url
+                    print(f"  ⚠ Template {tid} ({template_data['name']}): Local file not found, using proxy")
                 
                 template = MemeTemplate(
                     id=tid,
@@ -86,7 +99,8 @@ async def seed_templates_if_needed():
                     text_coordinates=template_data['text_coordinates_xy_wh'],
                     example_output=template_data['example_output'],
                     image_url=image_url,
-                    preview_image_url=image_url
+                    preview_image_url=preview_url,
+                    source="local"
                 )
                 db.add(template)
                 added += 1
@@ -164,7 +178,29 @@ app.include_router(users.router,         prefix="/api/auth",    tags=["users"])
 app.include_router(users.router,         prefix="/api/users",   tags=["users"])
 
 # ── Static Files ──────────────────────────────────────────────────────────────
-# Mount static files for serving generated memes and assets
-app.mount("/static", StaticFiles(directory="../public"), name="static")
+# Mount static files for serving template images, fonts, and generated memes
+# IMPORTANT: These must be mounted AFTER all API routes to avoid conflicts
+
+# Serve template images from public/frames directory
+frames_path = Path(__file__).parent.parent / "public" / "frames"
+if frames_path.exists():
+    app.mount("/frames", StaticFiles(directory=str(frames_path)), name="frames")
+    print(f"✅ Mounted /frames → {frames_path}")
+else:
+    print(f"⚠️  Warning: Frames directory not found at {frames_path}")
+
+# Serve fonts from public/fonts directory
+fonts_path = Path(__file__).parent.parent / "public" / "fonts"
+if fonts_path.exists():
+    app.mount("/fonts", StaticFiles(directory=str(fonts_path)), name="fonts")
+    print(f"✅ Mounted /fonts → {fonts_path}")
+else:
+    print(f"⚠️  Warning: Fonts directory not found at {fonts_path}")
+
+# Serve other static assets
+public_path = Path(__file__).parent.parent / "public"
+if public_path.exists():
+    app.mount("/static", StaticFiles(directory=str(public_path)), name="static")
+    print(f"✅ Mounted /static → {public_path}")
 
 # Made with Bob

@@ -210,16 +210,34 @@ export function TemplateSelector({
                     src={template.image_url || template.preview_image_url}
                     alt={template.name}
                     className="w-full h-full object-cover group-hover:brightness-110 transition-all"
+                    loading="lazy"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
+                      const img = e.target as HTMLImageElement;
+                      img.style.display = 'none';
+                      // Show fallback placeholder
+                      const placeholder = img.nextElementSibling as HTMLElement;
+                      if (placeholder) {
+                        placeholder.style.display = 'flex';
+                      }
+                    }}
+                    onLoad={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      // Hide fallback placeholder when image loads successfully
+                      const placeholder = img.nextElementSibling as HTMLElement;
+                      if (placeholder) {
+                        placeholder.style.display = 'none';
+                      }
                     }}
                   />
 
-                  {/* Placeholder if image fails */}
+                  {/* Placeholder if image fails or is loading */}
                   <div className="absolute inset-0 bg-surface-2 flex items-center justify-center">
-                    <div className="text-center">
+                    <div className="text-center p-2">
                       <div className="text-3xl mb-1">🖼️</div>
-                      <p className="text-xs text-secondary">{template.name}</p>
+                      <p className="text-xs text-secondary font-medium">{template.name}</p>
+                      <p className="text-[10px] text-muted mt-1">
+                        {template.text_field_count} text field{template.text_field_count !== 1 ? 's' : ''}
+                      </p>
                     </div>
                   </div>
 
