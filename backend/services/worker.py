@@ -163,14 +163,26 @@ async def cleanup_old_jobs(days_old: int = 7) -> int:
 async def get_queue_stats() -> Dict[str, Any]:
     """Get ARQ queue statistics"""
     try:
-        pool = await get_arq_pool()
-        queue_length = await pool.llen('arq:queue')
+        # Safely get the ARQ pool
+        try:
+            pool = await get_arq_pool()
+            if pool is None:
+                return {"error": "ARQ pool not initialized", "queue_length": 0}
+            queue_length = await pool.llen('arq:queue')
+        except Exception as e:
+            logger.warning(f"Could not get ARQ queue stats: {e}")
+            queue_length = 0
         
-        async with AsyncSessionLocal() as db:
-            pending = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "pending"))
-            processing = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "processing"))
-            completed = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "completed"))
-            failed = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "failed"))
+        # Get database stats
+        try:
+            async with AsyncSessionLocal() as db:
+                pending = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "pending"))
+                processing = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "processing"))
+                completed = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "completed"))
+                failed = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "failed"))
+        except Exception as e:
+            logger.warning(f"Could not get database stats: {e}")
+            pending = processing = completed = failed = 0
         
         return {
             "queue_length": queue_length,

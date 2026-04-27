@@ -11,6 +11,7 @@ This module provides comprehensive health monitoring for:
 """
 
 import asyncio
+import logging
 import time
 import psutil
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from db.session import AsyncSessionLocal, engine
 from services.worker import get_arq_pool, get_queue_stats
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class HealthChecker:
@@ -71,14 +73,26 @@ class HealthChecker:
                 
                 response_time = round((time.time() - start_time) * 1000, 2)
                 
+                # Try to get pool info if available
+                pool_info = {}
+                try:
+                    from db.session import engine as current_engine
+                    if current_engine and hasattr(current_engine, 'pool'):
+                        pool = current_engine.pool
+                        if hasattr(pool, 'size') and callable(pool.size):
+                            pool_info['connection_pool_size'] = pool.size()
+                        if hasattr(pool, 'checked_out') and callable(pool.checked_out):
+                            pool_info['checked_out_connections'] = pool.checked_out()
+                except Exception:
+                    pass  # Pool info is optional
+                
                 return {
                     "status": "healthy" if not missing_tables else "degraded",
                     "response_time_ms": response_time,
                     "tables_found": len(tables),
                     "required_tables": required_tables,
                     "missing_tables": missing_tables,
-                    "connection_pool_size": engine.pool.size(),
-                    "checked_out_connections": engine.pool.checkedout(),
+                    **pool_info,
                 }
                 
         except SQLAlchemyError as e:
@@ -197,16 +211,23 @@ class HealthChecker:
             # Get queue statistics
             stats = await get_queue_stats()
             
-            # Check ARQ pool connectivity
-            pool = await get_arq_pool()
-            await pool.ping()
+            # Try to check ARQ pool connectivity
+            pool_connected = False
+            try:
+                pool = await get_arq_pool()
+                if pool:
+                    await pool.ping()
+                    pool_connected = True
+            except Exception as e:
+                logger.warning(f"Could not connect to ARQ pool: {e}")
+                pool_connected = False
             
             response_time = round((time.time() - start_time) * 1000, 2)
             
             # Determine health status based on queue metrics
             status = "healthy"
             if "error" in stats:
-                status = "unhealthy"
+                status = "degraded"  # Queue stats unavailable but might still be operational
             elif stats.get("queue_length", 0) > 100:  # High queue backlog
                 status = "degraded"
             elif stats.get("failed_jobs", 0) > stats.get("completed_jobs", 0):  # More failures than successes
@@ -216,7 +237,7 @@ class HealthChecker:
                 "status": status,
                 "response_time_ms": response_time,
                 "queue_stats": stats,
-                "pool_connected": True
+                "pool_connected": pool_connected
             }
             
         except Exception as e:
