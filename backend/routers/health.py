@@ -54,7 +54,24 @@ class HealthChecker:
         start_time = time.time()
         
         try:
-            async with AsyncSessionLocal() as db:
+            # Ensure engine is initialized and get the current session maker
+            from db.session import AsyncSessionLocal as SessionLocal, _init_engine
+            
+            if SessionLocal is None:
+                _init_engine()
+                # Re-import after initialization
+                from db.session import AsyncSessionLocal as SessionLocal
+            
+            # Check if initialization succeeded
+            if SessionLocal is None:
+                return {
+                    "status": "unhealthy",
+                    "response_time_ms": 0,
+                    "error": "Database engine not initialized",
+                    "error_type": "initialization_error"
+                }
+            
+            async with SessionLocal() as db:
                 # Test basic connectivity
                 result = await db.execute(text("SELECT 1"))
                 result.scalar()
@@ -79,11 +96,19 @@ class HealthChecker:
                     from db.session import engine as current_engine
                     if current_engine and hasattr(current_engine, 'pool'):
                         pool = current_engine.pool
-                        if hasattr(pool, 'size') and callable(pool.size):
-                            pool_info['connection_pool_size'] = pool.size()
-                        if hasattr(pool, 'checked_out') and callable(pool.checked_out):
-                            pool_info['checked_out_connections'] = pool.checked_out()
-                except Exception:
+                        if pool:
+                            # Use size() method if available and callable
+                            if hasattr(pool, 'size'):
+                                size_attr = getattr(pool, 'size')
+                                if callable(size_attr):
+                                    pool_info['connection_pool_size'] = size_attr()
+                            # Use checkedout() method if available and callable
+                            if hasattr(pool, 'checkedout'):
+                                checkedout_attr = getattr(pool, 'checkedout')
+                                if callable(checkedout_attr):
+                                    pool_info['checked_out_connections'] = checkedout_attr()
+                except Exception as e:
+                    logger.debug(f"Could not retrieve pool info: {e}")
                     pass  # Pool info is optional
                 
                 return {

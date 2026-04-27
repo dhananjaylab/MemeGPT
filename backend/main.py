@@ -35,16 +35,16 @@ async def seed_templates_if_needed():
             existing_templates = result.scalars().all()
             
             if len(existing_templates) > 0:
-                print(f"✅ Found {len(existing_templates)} existing templates in database")
+                print(f"[OK] Found {len(existing_templates)} existing templates in database")
                 return
             
-            print("📦 No templates found. Seeding templates from meme_data.json...")
+            print("[INFO] No templates found. Seeding templates from meme_data.json...")
             
             # Load meme data
             meme_data_path = Path(__file__).parent.parent / "public" / "meme_data.json"
             
             if not meme_data_path.exists():
-                print(f"⚠️  Warning: meme_data.json not found at {meme_data_path}")
+                print(f"[WARNING] meme_data.json not found at {meme_data_path}")
                 return
             
             with open(meme_data_path, 'r', encoding='utf-8') as f:
@@ -77,13 +77,13 @@ async def seed_templates_if_needed():
                     # Use local static file URL (will be served by FastAPI StaticFiles)
                     image_url = f"/frames/{template_data['file_path']}"
                     preview_url = image_url
-                    print(f"  ✓ Template {tid} ({template_data['name']}): Using local file")
+                    print(f"  [OK] Template {tid} ({template_data['name']}): Using local file")
                 else:
                     # Priority 2: Use external URL with proxy as fallback
                     external_url = fallback_images.get(tid, "https://i.imgflip.com/30b1gx.jpg")
                     image_url = f"/api/memes/proxy-image?url={external_url}"
                     preview_url = image_url
-                    print(f"  ⚠ Template {tid} ({template_data['name']}): Local file not found, using proxy")
+                    print(f"  [WARNING] Template {tid} ({template_data['name']}): Local file not found, using proxy")
                 
                 template = MemeTemplate(
                     id=tid,
@@ -106,13 +106,13 @@ async def seed_templates_if_needed():
                 added += 1
             
             await db.commit()
-            print(f"✅ Successfully seeded {added} templates into database")
+            print(f"[OK] Successfully seeded {added} templates into database")
             
         finally:
             await db.close()
             
     except Exception as e:
-        print(f"⚠️  Warning: Could not seed templates: {e}")
+        print(f"[WARNING] Could not seed templates: {e}")
         print("   Templates can be seeded manually via /api/memes/seed-templates endpoint")
 
 
@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
         
     except Exception as e:
         # Log but don't fail startup if database isn't available
-        print(f"⚠️  Warning: Could not initialize database tables: {e}")
+        print(f"[WARNING] Could not initialize database tables: {e}")
         print("   Continuing without database - API docs will still be available")
     
     yield
@@ -185,22 +185,22 @@ app.include_router(users.router,         prefix="/api/users",   tags=["users"])
 frames_path = Path(__file__).parent.parent / "public" / "frames"
 if frames_path.exists():
     app.mount("/frames", StaticFiles(directory=str(frames_path)), name="frames")
-    print(f"✅ Mounted /frames → {frames_path}")
+    print(f"[OK] Mounted /frames -> {frames_path}")
 else:
-    print(f"⚠️  Warning: Frames directory not found at {frames_path}")
+    print(f"[WARNING] Frames directory not found at {frames_path}")
 
 # Serve fonts from public/fonts directory
 fonts_path = Path(__file__).parent.parent / "public" / "fonts"
 if fonts_path.exists():
     app.mount("/fonts", StaticFiles(directory=str(fonts_path)), name="fonts")
-    print(f"✅ Mounted /fonts → {fonts_path}")
+    print(f"[OK] Mounted /fonts -> {fonts_path}")
 else:
-    print(f"⚠️  Warning: Fonts directory not found at {fonts_path}")
+    print(f"[WARNING] Fonts directory not found at {fonts_path}")
 
 # Serve other static assets
 public_path = Path(__file__).parent.parent / "public"
 if public_path.exists():
     app.mount("/static", StaticFiles(directory=str(public_path)), name="static")
-    print(f"✅ Mounted /static → {public_path}")
+    print(f"[OK] Mounted /static -> {public_path}")
 
 # Made with Bob
