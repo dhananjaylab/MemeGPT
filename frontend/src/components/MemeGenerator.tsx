@@ -97,11 +97,11 @@ export function MemeGenerator() {
     setCurrentSuggestionIdx(0);
 
     try {
-      // Call /api/ai/suggest endpoint (prefer Gemini for synthesis)
+      // Call /api/ai/suggest endpoint (use default configured provider)
       const response = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), provider: 'gemini' }),
+        body: JSON.stringify({ prompt: prompt.trim() }),
       });
 
       if (!response.ok) {
