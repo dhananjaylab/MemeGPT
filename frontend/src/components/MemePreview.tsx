@@ -59,8 +59,9 @@ export function MemePreview({
     setIsImageLoading(true);
 
     const img = new Image();
-    // Set crossOrigin for local images served by our backend
-    if (templateImageUrl.startsWith('/frames/') || templateImageUrl.startsWith('/api/')) {
+    // Note: Local images from /frames/ don't need CORS since they're same-origin
+    // Only set crossOrigin for external proxy URLs
+    if (templateImageUrl.startsWith('/api/memes/proxy-image')) {
       img.crossOrigin = 'anonymous';
     }
     
