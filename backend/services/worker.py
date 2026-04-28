@@ -7,7 +7,7 @@ from arq import create_pool, ArqRedis
 from arq.connections import RedisSettings
 
 from core.config import settings
-from db.session import AsyncSessionLocal
+from db import session as db_session
 from models.models import MemeJob, GeneratedMeme, User
 
 # Configure logging
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Redis settings for ARQ
 redis_settings = RedisSettings.from_dsn(settings.redis_url)
+QUEUE_NAME = 'meme_generation'
 
 # Global ARQ pool for reuse
 _arq_pool: Optional[ArqRedis] = None
@@ -25,10 +26,13 @@ async def get_arq_pool() -> ArqRedis:
     
     if _arq_pool is None:
         try:
+            logger.info(f"Creating ARQ pool with settings: {redis_settings}")
+            logger.info(f"create_pool function: {create_pool}")
             _arq_pool = await create_pool(redis_settings)
-            logger.info("ARQ Redis pool created successfully")
+            logger.info(f"ARQ Redis pool created successfully: {_arq_pool}")
+            logger.info(f"Pool type: {type(_arq_pool)}")
         except Exception as e:
-            logger.error(f"Failed to create ARQ Redis pool: {e}")
+            logger.error(f"Failed to create ARQ Redis pool: {e}", exc_info=True)
             raise
     
     return _arq_pool
@@ -51,19 +55,24 @@ async def enqueue_meme_generation(
     manual_captions: Optional[List[str]] = None,
 ) -> str:
     """Enqueue a meme generation job"""
-    from workers.meme_worker import process_meme_generation
-    
+    print("[DEBUG] === enqueue_meme_generation CALLED ===")
     job_id = str(uuid4())
     user_id = user.id if user else None
     
+    print(f"[DEBUG] job_id={job_id}, user_id={user_id}")
     logger.info(
         f"Enqueueing meme generation job {job_id} for user {user_id} with "
         f"provider={ai_provider} mode={generation_mode}"
     )
     
     try:
+        print("[DEBUG] About to create job in database...")
+        # Ensure database engine is initialized
+        db_session._init_engine()
+        print("[DEBUG] Database engine initialized")
         # Create job record in database
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
+            print("[DEBUG] Got database session")
             job = MemeJob(
                 id=job_id,
                 user_id=user_id,
@@ -74,28 +83,34 @@ async def enqueue_meme_generation(
                 manual_captions=manual_captions,
                 status="pending"
             )
+            print("[DEBUG] Created MemeJob object")
             db.add(job)
+            print("[DEBUG] Added job to session")
             await db.commit()
+            print(f"[DEBUG] Job {job_id} committed to database")
             logger.info(f"Job {job_id} created in database")
         
+        print("[DEBUG] Database operations complete, now enqueueing with ARQ...")
         # Enqueue job with ARQ
         try:
+            print(f"[DEBUG] About to get ARQ pool...")
             pool = await get_arq_pool()
-            logger.info(f"Got ARQ pool: {pool}")
-            logger.info(f"Pool type: {type(pool)}")
-            logger.info(f"Has enqueue_job: {hasattr(pool, 'enqueue_job')}")
+            print(f"[DEBUG] Got ARQ pool: {pool}")
+            print(f"[DEBUG] Pool type: {type(pool)}")
+            print(f"[DEBUG] Has enqueue_job: {hasattr(pool, 'enqueue_job')}")
             
             if pool is None:
                 raise Exception("ARQ pool is None")
             
             # Check if enqueue_job method exists and is callable
             enqueue_method = getattr(pool, 'enqueue_job', None)
-            logger.info(f"enqueue_job method: {enqueue_method}")
-            logger.info(f"enqueue_job callable: {callable(enqueue_method)}")
+            print(f"[DEBUG] enqueue_job method: {enqueue_method}")
+            print(f"[DEBUG] enqueue_job callable: {callable(enqueue_method)}")
             
             if enqueue_method is None:
                 raise Exception("enqueue_job method not found on pool")
             
+            print(f"[DEBUG] About to call enqueue_job...")
             # Use function name string for ARQ enqueue_job
             result = await pool.enqueue_job(
                 'process_meme_generation',
@@ -107,11 +122,16 @@ async def enqueue_meme_generation(
                 manual_template_id,
                 manual_captions,
                 _job_timeout=300,
+                _queue_name=QUEUE_NAME,
             )
             
+            print(f"[DEBUG] Job {job_id} enqueued successfully with result: {result}")
             logger.info(f"Job {job_id} enqueued successfully with result: {result}")
             return job_id
         except Exception as e:
+            print(f"[DEBUG] Exception caught: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             logger.error(f"Failed to enqueue job {job_id}: {e}", exc_info=True)
             raise
         
@@ -122,7 +142,7 @@ async def enqueue_meme_generation(
 async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
     """Get job status and results"""
     try:
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             result = await db.execute(select(MemeJob).where(MemeJob.id == job_id))
             job = result.scalar_one_or_none()
             
@@ -166,7 +186,7 @@ async def cleanup_old_jobs(days_old: int = 7) -> int:
     try:
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
         
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             result = await db.execute(
                 delete(MemeJob).where(
                     and_(
@@ -190,14 +210,14 @@ async def get_queue_stats() -> Dict[str, Any]:
             pool = await get_arq_pool()
             if pool is None:
                 return {"error": "ARQ pool not initialized", "queue_length": 0}
-            queue_length = await pool.llen('arq:queue')
+            queue_length = await pool.llen(f'arq:queue:{QUEUE_NAME}')
         except Exception as e:
             logger.warning(f"Could not get ARQ queue stats: {e}")
             queue_length = 0
         
         # Get database stats
         try:
-            async with AsyncSessionLocal() as db:
+            async with db_session.AsyncSessionLocal() as db:
                 pending = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "pending"))
                 processing = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "processing"))
                 completed = await db.scalar(select(func.count(MemeJob.id)).where(MemeJob.status == "completed"))

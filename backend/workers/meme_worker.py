@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from pathlib import Path
 
 from core.config import settings
-from db.session import AsyncSessionLocal
+from db import session as db_session
 from models.models import MemeJob, GeneratedMeme, User, MemeTemplate
 from services.meme_ai import get_caption_generator, AIProvider
 from services.compositor import overlay_text_on_image
@@ -31,7 +31,7 @@ async def update_job_status(
 ) -> bool:
     """Update job status in database"""
     try:
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             update_data = {
                 "status": status,
                 "updated_at": datetime.now(timezone.utc)
@@ -114,7 +114,7 @@ async def process_meme_generation(
             return {"status": "failed"}
 
         meme_ids = []
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             for ai_meme in captions:
                 try:
                     template_id = int(ai_meme["meme_id"])
@@ -171,6 +171,8 @@ class WorkerSettings:
     @staticmethod
     async def startup(ctx):
         logger.info("Worker starting up")
+        db_session._init_engine()
+        logger.info("Database engine initialized in worker")
         
     @staticmethod
     async def shutdown(ctx):
