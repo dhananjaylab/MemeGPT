@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     
     # Redis
     redis_url: str = "redis://localhost:6379"
+    arq_queue_name: str = Field(default="arq:queue", alias="ARQ_QUEUE_NAME")
     
     # OpenAI
     openai_api_key: str = ""

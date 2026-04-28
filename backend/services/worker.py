@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 # Redis settings for ARQ
 redis_settings = RedisSettings.from_dsn(settings.redis_url)
-QUEUE_NAME = 'meme_generation'
 
 # Global ARQ pool for reuse
 _arq_pool: Optional[ArqRedis] = None
@@ -28,8 +27,11 @@ async def get_arq_pool() -> ArqRedis:
         try:
             logger.info(f"Creating ARQ pool with settings: {redis_settings}")
             logger.info(f"create_pool function: {create_pool}")
-            _arq_pool = await create_pool(redis_settings)
-            logger.info(f"ARQ Redis pool created successfully: {_arq_pool}")
+            _arq_pool = await create_pool(
+                redis_settings,
+                default_queue_name=settings.arq_queue_name
+            )
+            logger.info(f"ARQ Redis pool created successfully on queue {settings.arq_queue_name}: {_arq_pool}")
             logger.info(f"Pool type: {type(_arq_pool)}")
         except Exception as e:
             logger.error(f"Failed to create ARQ Redis pool: {e}", exc_info=True)
@@ -115,14 +117,13 @@ async def enqueue_meme_generation(
             result = await pool.enqueue_job(
                 'process_meme_generation',
                 job_id,
-                user_id,
                 prompt,
                 ai_provider,
                 generation_mode,
                 manual_template_id,
                 manual_captions,
-                _job_timeout=300,
-                _queue_name=QUEUE_NAME,
+                _job_id=job_id,
+                _queue_name=settings.arq_queue_name,
             )
             
             print(f"[DEBUG] Job {job_id} enqueued successfully with result: {result}")
@@ -204,16 +205,17 @@ async def cleanup_old_jobs(days_old: int = 7) -> int:
 
 async def get_queue_stats() -> Dict[str, Any]:
     """Get ARQ queue statistics"""
+    # Safely get the ARQ pool
     try:
-        # Safely get the ARQ pool
-        try:
-            pool = await get_arq_pool()
-            if pool is None:
-                return {"error": "ARQ pool not initialized", "queue_length": 0}
-            queue_length = await pool.llen(f'arq:queue:{QUEUE_NAME}')
-        except Exception as e:
-            logger.warning(f"Could not get ARQ queue stats: {e}")
-            queue_length = 0
+        pool = await get_arq_pool()
+        if pool is None:
+            return {"error": "ARQ pool not initialized", "queue_length": 0}
+        
+        # ARQ uses the queue name as the key for the zset
+        queue_length = await pool.zcard(settings.arq_queue_name)
+    except Exception as e:
+        logger.warning(f"Could not get ARQ queue stats: {e}")
+        queue_length = 0
         
         # Get database stats
         try:

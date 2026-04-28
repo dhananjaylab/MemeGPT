@@ -166,7 +166,7 @@ async def process_meme_generation(
 class WorkerSettings:
     functions = [process_meme_generation]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    queue_name = 'meme_generation'
+    queue_name = settings.arq_queue_name
     
     @staticmethod
     async def startup(ctx):
