@@ -117,6 +117,7 @@ async def enqueue_meme_generation(
             result = await pool.enqueue_job(
                 'process_meme_generation',
                 job_id,
+                user_id,
                 prompt,
                 ai_provider,
                 generation_mode,

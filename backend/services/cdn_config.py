@@ -111,31 +111,39 @@ class CDNManager:
             # Get optimization headers
             headers = self.get_optimization_headers(object_key)
             
-            # Add custom headers if provided
-            if custom_headers:
-                headers.update(custom_headers)
-            
-            # Prepare metadata
+            # Prepare metadata with custom headers
             metadata = {
                 'uploaded-by': 'memegpt-api',
                 'cache-policy': cache_control.split(',')[0].strip(),
                 'optimization-level': 'standard'
             }
             
-            # Add tags for public content
-            tagging = "public=true&content-type=image"
+            # Add custom X- headers to metadata
+            if custom_headers:
+                for k, v in custom_headers.items():
+                    if k.lower().startswith('x-'):
+                        # S3 metadata keys are stored without the x-amz-meta- prefix internally
+                        # but custom X- headers should be mapped to metadata
+                        clean_key = k.lower().replace('x-', '')
+                        metadata[clean_key] = str(v)
             
-            # Upload with all headers and metadata
-            self.client.put_object(
-                Bucket=self.bucket_name,
-                Key=object_key,
-                Body=file_data,
-                ContentType=content_type,
-                CacheControl=cache_control,
-                Metadata=metadata,
-                Tagging=tagging,
-                **headers
-            )
+            # Extract standard S3 headers from the optimization headers
+            s3_params = {
+                'Bucket': self.bucket_name,
+                'Key': object_key,
+                'Body': file_data,
+                'ContentType': content_type,
+                'CacheControl': cache_control,
+                'Metadata': metadata,
+                'Tagging': "public=true&content-type=image"
+            }
+            
+            # Only add specific supported headers to top-level params
+            if 'Content-Encoding' in headers:
+                s3_params['ContentEncoding'] = headers['Content-Encoding']
+            
+            # Upload with validated parameters
+            self.client.put_object(**s3_params)
             
             logger.info(f"Uploaded {object_key} with CDN headers")
             return True

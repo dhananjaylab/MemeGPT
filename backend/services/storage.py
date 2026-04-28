@@ -1,4 +1,5 @@
 import asyncio
+import math
 import boto3
 from botocore.exceptions import ClientError
 from pathlib import Path
@@ -61,7 +62,7 @@ class ImageOptimizer:
         
         # Calculate entropy (complexity measure)
         total_pixels = sum(histogram)
-        entropy = -sum((count/total_pixels) * (count/total_pixels).bit_length() 
+        entropy = -sum((count/total_pixels) * math.log2(count/total_pixels) 
                       for count in histogram if count > 0)
         
         # Determine quality based on image characteristics

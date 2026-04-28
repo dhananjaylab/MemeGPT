@@ -169,12 +169,12 @@ class WorkerSettings:
     queue_name = settings.arq_queue_name
     
     @staticmethod
-    async def startup(ctx):
+    async def on_startup(ctx):
         logger.info("Worker starting up")
         db_session._init_engine()
         logger.info("Database engine initialized in worker")
         
     @staticmethod
-    async def shutdown(ctx):
+    async def on_shutdown(ctx):
         logger.info("Worker shutting down")
         await close_arq_pool()
