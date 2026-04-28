@@ -248,16 +248,17 @@ export function MemePreview({
       >
         {({ zoomIn, zoomOut, resetTransform }: { zoomIn: () => void; zoomOut: () => void; resetTransform: () => void }) => (
           <>
-            <div className="relative bg-surface-2 rounded-lg overflow-hidden mb-4 border border-border">
+            <div className="relative bg-surface-2 rounded-lg overflow-hidden mb-4 border border-border" style={{ maxWidth: '100%' }}>
               <TransformComponent
-                wrapperClass="w-full"
-                contentClass="flex justify-center"
+                wrapperClass="w-full flex justify-center overflow-hidden"
+                contentClass="flex justify-center items-center"
               >
                 <canvas
                   ref={canvasRef}
                   width={canvasWidth}
                   height={canvasHeight}
-                  className="max-w-full h-auto cursor-move"
+                  className="cursor-move"
+                  style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseUp={handleCanvasMouseUp}

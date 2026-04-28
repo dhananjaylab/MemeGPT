@@ -256,7 +256,12 @@ export function MemeGenerator() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
       {/* Canvas for confetti */}
-      <canvas ref={confettiRef} style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none' }} />
+      <canvas 
+        ref={confettiRef} 
+        width={window.innerWidth}
+        height={window.innerHeight}
+        style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: 999 }} 
+      />
 
       {/* Main Content */}
       <div className="lg:col-span-3 space-y-8">
@@ -307,7 +312,7 @@ export function MemeGenerator() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe any situation, feeling, or random thought..."
-                  className="w-full h-32 bg-surface/50 backdrop-blur-sm border border-border hover:border-acid/40 focus:border-acid/60 rounded-lg px-4 py-3 text-primary placeholder:text-muted/70 focus:outline-none transition-all resize-none"
+                  className="w-full h-32 bg-[#1a1a1a] border border-border hover:border-acid/40 focus:border-acid/60 rounded-lg px-4 py-3 placeholder:text-secondary/50 focus:outline-none transition-all resize-none font-medium"
                 />
 
                 <div className="flex gap-3">

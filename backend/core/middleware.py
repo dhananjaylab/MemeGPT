@@ -40,8 +40,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         custom_limit = None
 
         # Enforce generation daily limits (plan-based by default).
-        if method == "POST" and path.startswith("/api/memes/generate"):
-            should_rate_limit = True
+        # DISABLED FOR NOW - rate limiting temporarily disabled
+        # if method == "POST" and path.startswith("/api/memes/generate"):
+        #     should_rate_limit = True
 
         # Apply generous read limits for new high-read endpoints.
         if method == "GET" and path.startswith("/api/memes/templates"):

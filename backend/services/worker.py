@@ -51,6 +51,8 @@ async def enqueue_meme_generation(
     manual_captions: Optional[List[str]] = None,
 ) -> str:
     """Enqueue a meme generation job"""
+    from workers.meme_worker import process_meme_generation
+    
     job_id = str(uuid4())
     user_id = user.id if user else None
     
@@ -77,21 +79,31 @@ async def enqueue_meme_generation(
             logger.info(f"Job {job_id} created in database")
         
         # Enqueue job with ARQ
-        pool = await get_arq_pool()
-        await pool.enqueue_job(
-            'process_meme_generation',
-            job_id,
-            user_id,
-            prompt,
-            ai_provider,
-            generation_mode,
-            manual_template_id,
-            manual_captions,
-            _job_timeout=300,  # 5 minutes timeout
-        )
-        
-        logger.info(f"Job {job_id} enqueued successfully")
-        return job_id
+        try:
+            pool = await get_arq_pool()
+            logger.info(f"Got ARQ pool: {pool}")
+            
+            if pool is None:
+                raise Exception("ARQ pool is None")
+            
+            # Use function name string for ARQ enqueue
+            await pool.enqueue(
+                'process_meme_generation',
+                job_id,
+                user_id,
+                prompt,
+                ai_provider,
+                generation_mode,
+                manual_template_id,
+                manual_captions,
+                _job_timeout=300,
+            )
+            
+            logger.info(f"Job {job_id} enqueued successfully")
+            return job_id
+        except Exception as e:
+            logger.error(f"Failed to enqueue job {job_id}: {e}", exc_info=True)
+            raise
         
     except Exception as e:
         logger.error(f"Error enqueueing job {job_id}: {e}")

@@ -130,6 +130,24 @@ body {
     @apply bg-surface-2 border border-border rounded-lg px-4 py-3 text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-[#B0FF00]/20 focus:border-[#B0FF00]/40 transition-all;
   }
 
+  /* ── Textarea ─────────────────────────────────────────────────────────── */
+  textarea {
+    color: #ffffff !important;
+    caret-color: #B0FF00 !important;
+    background-color: rgba(26, 26, 26, 0.8) !important;
+    text-shadow: none !important;
+    font-weight: 500;
+  }
+
+  textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+  }
+
+  textarea:focus {
+    color: #ffffff !important;
+    caret-color: #B0FF00 !important;
+  }
+
   /* ── Badges ───────────────────────────────────────────────────────────── */
   .badge-acid {
     @apply bg-[#B0FF00]/10 text-acid text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-[#B0FF00]/20;
