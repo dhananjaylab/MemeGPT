@@ -38,7 +38,7 @@ async def close_arq_pool():
     global _arq_pool
     
     if _arq_pool:
-        await _arq_pool.close()
+        await _arq_pool.aclose()
         _arq_pool = None
         logger.info("ARQ Redis pool closed")
 
@@ -82,12 +82,22 @@ async def enqueue_meme_generation(
         try:
             pool = await get_arq_pool()
             logger.info(f"Got ARQ pool: {pool}")
+            logger.info(f"Pool type: {type(pool)}")
+            logger.info(f"Has enqueue_job: {hasattr(pool, 'enqueue_job')}")
             
             if pool is None:
                 raise Exception("ARQ pool is None")
             
-            # Use function name string for ARQ enqueue
-            await pool.enqueue(
+            # Check if enqueue_job method exists and is callable
+            enqueue_method = getattr(pool, 'enqueue_job', None)
+            logger.info(f"enqueue_job method: {enqueue_method}")
+            logger.info(f"enqueue_job callable: {callable(enqueue_method)}")
+            
+            if enqueue_method is None:
+                raise Exception("enqueue_job method not found on pool")
+            
+            # Use function name string for ARQ enqueue_job
+            result = await pool.enqueue_job(
                 'process_meme_generation',
                 job_id,
                 user_id,
@@ -99,7 +109,7 @@ async def enqueue_meme_generation(
                 _job_timeout=300,
             )
             
-            logger.info(f"Job {job_id} enqueued successfully")
+            logger.info(f"Job {job_id} enqueued successfully with result: {result}")
             return job_id
         except Exception as e:
             logger.error(f"Failed to enqueue job {job_id}: {e}", exc_info=True)
