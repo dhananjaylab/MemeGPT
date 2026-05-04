@@ -25,25 +25,31 @@ Generate hilarious memes with ease using MemeGPT! This application leverages the
 
 ## Features
 
-- **AI-Powered Meme Generation**  
-  Uses OpenAI's GPT-4o models to understand your input and generate relevant meme text.
+- **AI-Powered Meme Generation**
+  Uses OpenAI's GPT-4o and Google Gemini models to understand your input and generate relevant meme text.
 
-- **Variety of Meme Templates**  
+- **Imgflip Integration** 🆕
+  Access to 100+ popular meme templates from Imgflip API with automatic caching and fallback to local database templates.
+
+- **Variety of Meme Templates**
   Comes pre-loaded with a selection of popular meme templates (Drake Hotline Bling, Distracted Boyfriend, Disaster Girl, and more!).
 
-- **Modern Web Interface**  
+- **Manual Editor Mode**
+  Create custom memes with full control over text positioning, styling, and template selection.
+
+- **Modern Web Interface**
   Built with React + TypeScript and Vite for a responsive and intuitive user experience.
 
-- **Async Job Processing**  
+- **Async Job Processing**
   ARQ-powered job queue for non-blocking meme generation with real-time progress tracking.
 
-- **Advanced Image Management**  
+- **Advanced Image Management**
   Cloudflare R2 storage integration for optimized image delivery and CDN caching.
 
-- **Rate Limiting & Billing**  
+- **Rate Limiting & Billing**
   Integrated Stripe payments with subscription tiers and sliding window rate limiting.
 
-- **Production-Ready**  
+- **Production-Ready**
   Docker containerization, comprehensive error handling, and monitoring with Sentry.
 
 ---
@@ -386,3 +392,5 @@ For issues, questions, or feedback:
 ---
 
 **Happy Meme Generation! 🎉**   
+
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/dhananjaylab/MemeGPT?utm_source=oss&utm_medium=github&utm_campaign=dhananjaylab%2FMemeGPT&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)

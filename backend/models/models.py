@@ -162,6 +162,11 @@ class MemeTemplate(Base):
     example_output: List[str] = Column(JSON, nullable=False)
     image_url: Optional[str] = Column(String, nullable=True)
     preview_image_url: Optional[str] = Column(String, nullable=True)
+    # Imgflip integration fields
+    source: str = Column(String, nullable=False, default="local", index=True)  # "local" or "imgflip"
+    imgflip_id: Optional[str] = Column(String, nullable=True, unique=True, index=True)
+    box_count: Optional[int] = Column(Integer, nullable=True)
+    last_synced_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now())
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

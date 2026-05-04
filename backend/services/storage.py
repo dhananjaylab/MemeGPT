@@ -1,4 +1,5 @@
 import asyncio
+import math
 import boto3
 from botocore.exceptions import ClientError
 from pathlib import Path
@@ -7,6 +8,7 @@ from PIL import Image, ImageOps, ImageFilter
 import io
 import hashlib
 import logging
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from core.config import settings
 from services.cdn_config import CDNManager
@@ -61,7 +63,7 @@ class ImageOptimizer:
         
         # Calculate entropy (complexity measure)
         total_pixels = sum(histogram)
-        entropy = -sum((count/total_pixels) * (count/total_pixels).bit_length() 
+        entropy = -sum((count/total_pixels) * math.log2(count/total_pixels) 
                       for count in histogram if count > 0)
         
         # Determine quality based on image characteristics
@@ -194,56 +196,80 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
                   create_variants: bool = False) -> Optional[Dict[str, str]]:
     """
     Upload image to Cloudflare R2 with optimization and CDN configuration
-    Returns dictionary with URLs for different variants
+    Returns dictionary with URLs for different variants.
+    Falls back to local storage if R2 is unavailable.
     """
-    if not r2_client or not cdn_manager:
-        logger.error("R2 client or CDN manager not initialized. Check your credentials.")
-        return None
-        
     try:
-        # Load image
-        img = Image.open(file_path)
-        
-        # Generate file hash for cache busting
-        with open(file_path, 'rb') as f:
-            file_hash = image_optimizer.calculate_file_hash(f.read())
-        
-        # Prepare object key with hash
-        base_key = object_key.rsplit('.', 1)[0] if '.' in object_key else object_key
-        
-        urls = {}
-        
-        if create_variants:
-            # Create multiple optimized variants
-            variants = image_optimizer.create_multiple_variants(img)
+        # Try R2 upload if credentials are configured
+        if r2_client and cdn_manager and settings.r2_access_key_id and settings.r2_secret_access_key:
+            # Load image
+            img = Image.open(file_path)
             
-            for variant_name, (data, content_type, metadata) in variants.items():
-                variant_key = f"{base_key}-{file_hash}.{variant_name}.{metadata['format']}"
+            # Generate file hash for cache busting
+            with open(file_path, 'rb') as f:
+                file_hash = image_optimizer.calculate_file_hash(f.read())
+            
+            # Prepare object key with hash
+            base_key = object_key.rsplit('.', 1)[0] if '.' in object_key else object_key
+            
+            urls = {}
+            
+            if create_variants:
+                # Create multiple optimized variants
+                variants = image_optimizer.create_multiple_variants(img)
                 
-                success = await _upload_variant(variant_key, data, content_type, metadata)
-                if success:
-                    urls[variant_name] = f"{settings.r2_public_url}/{variant_key}"
+                for variant_name, (data, content_type, metadata) in variants.items():
+                    variant_key = f"{base_key}-{file_hash}.{variant_name}.{metadata['format']}"
                     
-        else:
-            # Single optimized upload
-            if optimize:
-                data, content_type, metadata = image_optimizer.optimize_for_web(img)
-                final_key = f"{base_key}-{file_hash}.webp"
+                    success = await _upload_variant(variant_key, data, content_type, metadata)
+                    if success:
+                        urls[variant_name] = f"{settings.r2_public_url}/{variant_key}"
+                        
             else:
-                with open(file_path, 'rb') as f:
-                    data = io.BytesIO(f.read())
-                content_type = cdn_manager.get_content_type(object_key)
-                metadata = {'optimization_applied': False}
-                final_key = f"{base_key}-{file_hash}.{object_key.split('.')[-1]}"
+                # Single optimized upload
+                if optimize:
+                    data, content_type, metadata = image_optimizer.optimize_for_web(img)
+                    final_key = f"{base_key}-{file_hash}.webp"
+                else:
+                    with open(file_path, 'rb') as f:
+                        data = io.BytesIO(f.read())
+                    content_type = cdn_manager.get_content_type(object_key)
+                    metadata = {'optimization_applied': False}
+                    final_key = f"{base_key}-{file_hash}.{object_key.split('.')[-1]}"
+                
+                success = await _upload_variant(final_key, data, content_type, metadata)
+                if success:
+                    urls['primary'] = f"{settings.r2_public_url}/{final_key}"
             
-            success = await _upload_variant(final_key, data, content_type, metadata)
-            if success:
-                urls['primary'] = f"{settings.r2_public_url}/{final_key}"
-        
-        return urls if urls else None
-        
+            if urls:
+                logger.info(f"Successfully uploaded to R2: {urls}")
+                return urls
+            else:
+                logger.warning("R2 upload returned empty URLs, falling back to local storage")
+        else:
+            logger.info("R2 credentials not configured, using local storage fallback")
     except Exception as e:
-        logger.error(f"Unexpected error uploading to R2: {e}")
+        logger.warning(f"R2 upload failed ({str(e)}), falling back to local storage")
+    
+    # Fallback: Use local static storage
+    try:
+        output_dir = Path(__file__).parent.parent.parent / "public" / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Copy file to output directory
+        filename = file_path.name
+        output_path = output_dir / filename
+        
+        # If file already exists, keep it
+        if not output_path.exists():
+            shutil.copy2(file_path, output_path)
+        
+        # Return relative URL path
+        relative_url = f"/static/output/{filename}"
+        logger.info(f"Using local storage fallback: {relative_url}")
+        return {'primary': relative_url}
+    except Exception as e:
+        logger.error(f"Local storage fallback also failed: {e}")
         return None
 
 async def _upload_variant(object_key: str, data: io.BytesIO, content_type: str, 

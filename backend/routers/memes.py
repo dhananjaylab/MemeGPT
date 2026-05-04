@@ -1,8 +1,10 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
+import logging
 
 from db.session import get_db
 from models.models import GeneratedMeme, User, MemeTemplate
@@ -10,7 +12,13 @@ from services.auth import get_current_user_optional
 from services.rate_limit import rate_limit_request
 from workers.meme_worker import process_meme_generation
 from services.worker import enqueue_meme_generation
+from services.imgflip import imgflip_service
 
+import json
+from pathlib import Path
+import httpx
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -31,11 +39,21 @@ class MemeResponse(BaseModel):
     id: str
     template_name: str
     template_id: int
+    prompt: str
     meme_text: List[str]
     image_url: str
     created_at: str
     share_count: int
     like_count: int
+    is_public: bool
+
+
+class MemeListResponse(BaseModel):
+    memes: List[MemeResponse]
+    total: int
+    page: int
+    limit: int
+    has_more: bool
 
 
 class TemplateResponse(BaseModel):
@@ -47,6 +65,8 @@ class TemplateResponse(BaseModel):
     preview_image_url: Optional[str]
     font_path: str
     usage_instructions: Optional[str] = None
+    source: Optional[str] = "local"  # "local" or "imgflip"
+    imgflip_id: Optional[str] = None
 
 
 @router.post("/generate", response_model=GenerateMemeResponse)
@@ -100,7 +120,19 @@ async def generate_meme(
     )
 
 
-@router.get("/public", response_model=List[MemeResponse])
+@router.get("", response_model=MemeListResponse)
+async def get_memes_alias(
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "recent",
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Alias for /public endpoint - Get public memes for gallery"""
+    return await get_public_memes(page, limit, sort, search, db)
+
+
+@router.get("/public", response_model=MemeListResponse)
 async def get_public_memes(
     page: int = 1,
     limit: int = 20,
@@ -122,6 +154,7 @@ async def get_public_memes(
     query = select(GeneratedMeme).where(GeneratedMeme.is_public == True)
     
     # Add search filter
+    search_term = None
     if search:
         search_term = f"%{search}%"
         query = query.where(
@@ -146,22 +179,40 @@ async def get_public_memes(
     result = await db.execute(query)
     memes = result.scalars().all()
     
-    return [
-        MemeResponse(
-            id=meme.id,
-            template_name=meme.template_name,
-            template_id=meme.template_id,
-            meme_text=meme.meme_text,
-            image_url=meme.image_url,
-            created_at=meme.created_at.isoformat(),
-            share_count=meme.share_count,
-            like_count=meme.like_count
+    # Check if there are more results
+    count_query = select(func.count()).select_from(GeneratedMeme).where(GeneratedMeme.is_public == True)
+    if search and search_term:
+        count_query = count_query.where(
+            GeneratedMeme.prompt.ilike(search_term) |
+            GeneratedMeme.template_name.ilike(search_term)
         )
-        for meme in memes
-    ]
+    total_result = await db.execute(count_query)
+    total_count = total_result.scalar() or 0
+    
+    return MemeListResponse(
+        memes=[
+            MemeResponse(
+                id=meme.id,
+                template_name=meme.template_name,
+                template_id=meme.template_id,
+                prompt=meme.prompt,
+                meme_text=meme.meme_text,
+                image_url=meme.image_url,
+                created_at=meme.created_at.isoformat(),
+                share_count=meme.share_count,
+                like_count=meme.like_count,
+                is_public=meme.is_public
+            )
+            for meme in memes
+        ],
+        total=total_count,
+        page=page,
+        limit=limit,
+        has_more=offset + len(memes) < total_count
+    )
 
 
-@router.get("/my", response_model=List[MemeResponse])
+@router.get("/my", response_model=MemeListResponse)
 async def get_my_memes(
     page: int = 1,
     limit: int = 20,
@@ -193,19 +244,122 @@ async def get_my_memes(
     result = await db.execute(query)
     memes = result.scalars().all()
     
-    return [
-        MemeResponse(
-            id=meme.id,
-            template_name=meme.template_name,
-            template_id=meme.template_id,
-            meme_text=meme.meme_text,
-            image_url=meme.image_url,
-            created_at=meme.created_at.isoformat(),
-            share_count=meme.share_count,
-            like_count=meme.like_count
+    # Check if there are more results
+    count_query = select(func.count()).select_from(GeneratedMeme).where(GeneratedMeme.user_id == current_user.id)
+    total_result = await db.execute(count_query)
+    total_count = total_result.scalar() or 0
+    
+    return MemeListResponse(
+        memes=[
+            MemeResponse(
+                id=meme.id,
+                template_name=meme.template_name,
+                template_id=meme.template_id,
+                prompt=meme.prompt,
+                meme_text=meme.meme_text,
+                image_url=meme.image_url,
+                created_at=meme.created_at.isoformat(),
+                share_count=meme.share_count,
+                like_count=meme.like_count,
+                is_public=meme.is_public
+            )
+            for meme in memes
+        ],
+        total=total_count,
+        page=page,
+        limit=limit,
+        has_more=offset + len(memes) < total_count
+    )
+
+
+# Template Management Endpoints
+# NOTE: These must come BEFORE /{meme_id} route to avoid path conflicts
+
+@router.get("/templates", response_model=List[TemplateResponse])
+async def get_templates(
+    source: Optional[str] = None,  # "all", "local", or "imgflip"
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all available meme templates for AI suggestions and manual editor"""
+    try:
+        # Build query with optional source filter
+        query = select(MemeTemplate)
+        if source and source != "all":
+            query = query.where(MemeTemplate.source == source)
+        
+        result = await db.execute(query)
+        templates = result.scalars().all()
+        
+        return [
+            TemplateResponse(
+                id=template.id,
+                name=template.name,
+                image_url=template.image_url,
+                text_field_count=template.number_of_text_fields,
+                text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+                preview_image_url=template.preview_image_url or template.image_url,
+                font_path=template.font_path,
+                usage_instructions=template.usage_instructions,
+                source=template.source,
+                imgflip_id=template.imgflip_id,
+            )
+            for template in templates
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching templates: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch templates")
+
+
+@router.post("/templates/sync-imgflip")
+async def sync_imgflip_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Sync popular meme templates from Imgflip API to database.
+    This endpoint fetches the top 100 templates and caches them.
+    """
+    try:
+        # Perform sync
+        stats = await imgflip_service.sync_templates_to_db(db)
+        
+        return {
+            "success": True,
+            "message": f"Successfully synced Imgflip templates",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to sync Imgflip templates: {str(e)}"
         )
-        for meme in memes
-    ]
+
+
+@router.get("/templates/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific meme template details"""
+    
+    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return TemplateResponse(
+        id=template.id,
+        name=template.name,
+        image_url=template.image_url,
+        text_field_count=template.number_of_text_fields,
+        text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
+        preview_image_url=template.preview_image_url or template.image_url,
+        font_path=template.font_path,
+        usage_instructions=template.usage_instructions,
+        source=template.source,
+        imgflip_id=template.imgflip_id,
+    )
 
 
 @router.get("/{meme_id}", response_model=MemeResponse)
@@ -233,57 +387,6 @@ async def get_meme(
         created_at=meme.created_at.isoformat(),
         share_count=meme.share_count,
         like_count=meme.like_count
-    )
-
-
-# Template Management Endpoints
-
-@router.get("/templates", response_model=List[TemplateResponse])
-async def get_templates(
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all available meme templates for AI suggestions and manual editor"""
-    
-    result = await db.execute(select(MemeTemplate))
-    templates = result.scalars().all()
-    
-    return [
-        TemplateResponse(
-            id=template.id,
-            name=template.name,
-            image_url=template.image_url,
-            text_field_count=template.number_of_text_fields,
-            text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
-            preview_image_url=template.preview_image_url or template.image_url,
-            font_path=template.font_path,
-            usage_instructions=template.usage_instructions,
-        )
-        for template in templates
-    ]
-
-
-@router.get("/templates/{template_id}", response_model=TemplateResponse)
-async def get_template(
-    template_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get specific meme template details"""
-    
-    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
-    template = result.scalar_one_or_none()
-    
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-    
-    return TemplateResponse(
-        id=template.id,
-        name=template.name,
-        image_url=template.image_url,
-        text_field_count=template.number_of_text_fields,
-        text_coordinates=template.text_coordinates or template.text_coordinates_xy_wh,
-        preview_image_url=template.preview_image_url or template.image_url,
-        font_path=template.font_path,
-        usage_instructions=template.usage_instructions,
     )
 
 
@@ -354,3 +457,158 @@ async def delete_meme(
     await db.commit()
     
     return {"message": "Meme deleted successfully"}
+
+
+@router.post("/seed-templates")
+async def seed_templates(db: AsyncSession = Depends(get_db)):
+    """Seed meme templates from meme_data.json with local files prioritized"""
+    
+    # Load meme data
+    meme_data_path = Path(__file__).parent.parent.parent / "public" / "meme_data.json"
+    
+    if not meme_data_path.exists():
+        raise HTTPException(status_code=500, detail="meme_data.json not found")
+    
+    with open(meme_data_path, 'r', encoding='utf-8') as f:
+        templates_data = json.load(f)
+    
+    # Fallback image URLs using imgflip API (used only if local file doesn't exist)
+    fallback_images = {
+        0: "https://i.imgflip.com/30b1gx.jpg",  # Drake
+        1: "https://i.imgflip.com/1ur9b0.jpg",  # Distracted Boyfriend
+        2: "https://i.imgflip.com/22bdq6.jpg",  # Left Exit
+        3: "https://i.imgflip.com/26am.jpg",    # One Does Not Simply
+        4: "https://i.imgflip.com/1bij.jpg",    # Success Kid
+        5: "https://i.imgflip.com/1g8my4.jpg",  # Disaster Girl
+        6: "https://i.imgflip.com/gk5el.jpg",   # Hide the Pain Harold
+        7: "https://i.imgflip.com/1ihzfe.jpg",  # Surprised Pikachu
+        8: "https://i.imgflip.com/261o3j.jpg",  # Change My Mind
+        9: "https://i.imgflip.com/1c1uej.jpg",  # Leonardo Dicaprio Cheers
+        10: "https://i.imgflip.com/1otk96.jpg", # Trump Bill Signing
+    }
+    
+    added = 0
+    updated = 0
+    frames_dir = Path(__file__).parent.parent.parent / "public" / "frames"
+    
+    for template_data in templates_data:
+        tid = template_data['id']
+        
+        # Check if exists
+        result = await db.execute(
+            select(MemeTemplate).where(MemeTemplate.id == tid)
+        )
+        existing = result.scalar_one_or_none()
+        
+        # Priority 1: Use local file if it exists
+        local_file_path = frames_dir / template_data['file_path']
+        if local_file_path.exists():
+            # Use local static file URL (served by FastAPI StaticFiles)
+            image_url = f"/frames/{template_data['file_path']}"
+            preview_url = image_url
+        else:
+            # Priority 2: Use external URL with proxy as fallback
+            external_url = fallback_images.get(tid, "https://i.imgflip.com/30b1gx.jpg")
+            image_url = f"/api/memes/proxy-image?url={external_url}"
+            preview_url = image_url
+        
+        if existing:
+            # Update
+            existing.name = template_data['name']
+            existing.alternative_names = template_data.get('alternative_names', [])
+            existing.file_path = template_data['file_path']
+            existing.font_path = template_data['font_path']
+            existing.text_color = template_data['text_color']
+            existing.text_stroke = template_data.get('text_stroke', False)
+            existing.usage_instructions = template_data['usage_instructions']
+            existing.number_of_text_fields = template_data['number_of_text_fields']
+            existing.text_coordinates_xy_wh = template_data['text_coordinates_xy_wh']
+            existing.text_coordinates = template_data['text_coordinates_xy_wh']
+            existing.example_output = template_data['example_output']
+            existing.image_url = image_url
+            existing.preview_image_url = preview_url
+            existing.source = "local"
+            updated += 1
+        else:
+            # Create
+            template = MemeTemplate(
+                id=tid,
+                name=template_data['name'],
+                alternative_names=template_data.get('alternative_names', []),
+                file_path=template_data['file_path'],
+                font_path=template_data['font_path'],
+                text_color=template_data['text_color'],
+                text_stroke=template_data.get('text_stroke', False),
+                usage_instructions=template_data['usage_instructions'],
+                number_of_text_fields=template_data['number_of_text_fields'],
+                text_coordinates_xy_wh=template_data['text_coordinates_xy_wh'],
+                text_coordinates=template_data['text_coordinates_xy_wh'],
+                example_output=template_data['example_output'],
+                image_url=image_url,
+                preview_image_url=preview_url,
+                source="local"
+            )
+            db.add(template)
+            added += 1
+    
+    await db.commit()
+    
+    return {
+        "message": "Templates seeded successfully",
+        "added": added,
+        "updated": updated,
+        "total": added + updated
+    }
+
+
+@router.get("/proxy-image")
+async def proxy_template_image(url: str):
+    """
+    Proxy external template images to avoid CORS issues.
+    This endpoint fetches images from external sources (like Imgflip)
+    and serves them with proper CORS headers.
+    """
+    try:
+        # Validate URL to prevent abuse
+        if not url.startswith(('http://', 'https://')):
+            raise HTTPException(status_code=400, detail="Invalid URL scheme")
+        
+        # Fetch image from external source
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                url,
+                timeout=15.0,
+                headers={
+                    'User-Agent': 'MemeGPT/2.0 (Image Proxy)',
+                }
+            )
+            response.raise_for_status()
+            
+            # Determine content type
+            content_type = response.headers.get("content-type", "image/jpeg")
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL does not point to an image")
+            
+            # Return image with proper CORS and caching headers
+            return Response(
+                content=response.content,
+                media_type=content_type,
+                headers={
+                    "Cache-Control": "public, max-age=86400, immutable",  # Cache for 24 hours
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "X-Content-Type-Options": "nosniff",
+                }
+            )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Failed to fetch image: HTTP {e.response.status_code}"
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Image fetch timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")

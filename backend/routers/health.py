@@ -11,6 +11,7 @@ This module provides comprehensive health monitoring for:
 """
 
 import asyncio
+import logging
 import time
 import psutil
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from db.session import AsyncSessionLocal, engine
 from services.worker import get_arq_pool, get_queue_stats
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class HealthChecker:
@@ -36,9 +38,15 @@ class HealthChecker:
         self._redis_client: Optional[redis.Redis] = None
     
     async def get_redis_client(self) -> redis.Redis:
-        """Get Redis client with connection reuse"""
+        """Get Redis client with connection reuse and timeout"""
         if self._redis_client is None:
-            self._redis_client = redis.from_url(settings.redis_url)
+            self._redis_client = redis.from_url(
+                settings.redis_url,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                retry_on_timeout=True,
+                health_check_interval=30
+            )
         return self._redis_client
     
     async def close_redis_client(self):
@@ -52,7 +60,24 @@ class HealthChecker:
         start_time = time.time()
         
         try:
-            async with AsyncSessionLocal() as db:
+            # Ensure engine is initialized and get the current session maker
+            from db.session import AsyncSessionLocal as SessionLocal, _init_engine
+            
+            if SessionLocal is None:
+                _init_engine()
+                # Re-import after initialization
+                from db.session import AsyncSessionLocal as SessionLocal
+            
+            # Check if initialization succeeded
+            if SessionLocal is None:
+                return {
+                    "status": "unhealthy",
+                    "response_time_ms": 0,
+                    "error": "Database engine not initialized",
+                    "error_type": "initialization_error"
+                }
+            
+            async with SessionLocal() as db:
                 # Test basic connectivity
                 result = await db.execute(text("SELECT 1"))
                 result.scalar()
@@ -71,14 +96,39 @@ class HealthChecker:
                 
                 response_time = round((time.time() - start_time) * 1000, 2)
                 
+                # Try to get pool info if available
+                pool_info = {}
+                try:
+                    from db.session import engine as current_engine
+                    if current_engine and hasattr(current_engine, 'pool'):
+                        pool = current_engine.pool
+                        if pool:
+                            # Use size() method if available and callable
+                            if hasattr(pool, 'size'):
+                                size_attr = getattr(pool, 'size')
+                                if callable(size_attr):
+                                    try:
+                                        pool_info['connection_pool_size'] = size_attr()
+                                    except Exception as size_err:
+                                        logger.debug(f"Could not get pool size: {size_err}")
+                            # Use checkedout() method if available and callable
+                            if hasattr(pool, 'checkedout'):
+                                checkedout_attr = getattr(pool, 'checkedout')
+                                if callable(checkedout_attr):
+                                    try:
+                                        pool_info['checked_out_connections'] = checkedout_attr()
+                                    except Exception as checkout_err:
+                                        logger.debug(f"Could not get checked out connections: {checkout_err}")
+                except Exception as e:
+                    logger.debug(f"Could not retrieve pool info: {e}")
+                
                 return {
                     "status": "healthy" if not missing_tables else "degraded",
                     "response_time_ms": response_time,
                     "tables_found": len(tables),
                     "required_tables": required_tables,
                     "missing_tables": missing_tables,
-                    "connection_pool_size": engine.pool.size(),
-                    "checked_out_connections": engine.pool.checkedout(),
+                    **pool_info,
                 }
                 
         except SQLAlchemyError as e:
@@ -101,51 +151,70 @@ class HealthChecker:
     async def check_redis(self) -> Dict[str, Any]:
         """Check Redis connectivity and basic operations"""
         start_time = time.time()
+        max_retries = 3
+        retry_delay = 1
         
-        try:
-            redis_client = await self.get_redis_client()
-            
-            # Test basic connectivity
-            await redis_client.ping()
-            
-            # Test basic operations
-            test_key = "health_check_test"
-            await redis_client.set(test_key, "test_value", ex=10)
-            test_value = await redis_client.get(test_key)
-            await redis_client.delete(test_key)
-            
-            # Get Redis info
-            info = await redis_client.info()
-            
-            response_time = round((time.time() - start_time) * 1000, 2)
-            
-            return {
-                "status": "healthy",
-                "response_time_ms": response_time,
-                "redis_version": info.get("redis_version"),
-                "connected_clients": info.get("connected_clients"),
-                "used_memory_human": info.get("used_memory_human"),
-                "keyspace_hits": info.get("keyspace_hits"),
-                "keyspace_misses": info.get("keyspace_misses"),
-                "test_operation": "success" if test_value == b"test_value" else "failed"
-            }
-            
-        except redis.ConnectionError as e:
-            response_time = round((time.time() - start_time) * 1000, 2)
-            return {
-                "status": "unhealthy",
-                "response_time_ms": response_time,
-                "error": str(e),
-                "error_type": "connection_error"
-            }
-        except Exception as e:
-            response_time = round((time.time() - start_time) * 1000, 2)
-            return {
-                "status": "unhealthy",
-                "response_time_ms": response_time,
-                "error": str(e),
-                "error_type": "unexpected_error"
-            }
+        for attempt in range(max_retries):
+            try:
+                redis_client = await self.get_redis_client()
+                
+                # Test basic connectivity with timeout
+                await asyncio.wait_for(redis_client.ping(), timeout=5.0)
+                
+                # Test basic operations
+                test_key = "health_check_test"
+                await redis_client.set(test_key, "test_value", ex=10)
+                test_value = await redis_client.get(test_key)
+                await redis_client.delete(test_key)
+                
+                # Get Redis info
+                info = await redis_client.info()
+                
+                response_time = round((time.time() - start_time) * 1000, 2)
+                
+                return {
+                    "status": "healthy",
+                    "response_time_ms": response_time,
+                    "redis_version": info.get("redis_version"),
+                    "connected_clients": info.get("connected_clients"),
+                    "used_memory_human": info.get("used_memory_human"),
+                    "keyspace_hits": info.get("keyspace_hits"),
+                    "keyspace_misses": info.get("keyspace_misses"),
+                    "test_operation": "success" if test_value == b"test_value" else "failed"
+                }
+                
+            except (redis.ConnectionError, asyncio.TimeoutError) as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Redis connection attempt {attempt + 1} failed, retrying in {retry_delay}s: {e}")
+                    await asyncio.sleep(retry_delay)
+                    # Close and reset client for retry
+                    await self.close_redis_client()
+                    continue
+                else:
+                    response_time = round((time.time() - start_time) * 1000, 2)
+                    return {
+                        "status": "unhealthy",
+                        "response_time_ms": response_time,
+                        "error": f"Failed after {max_retries} attempts: {str(e)}",
+                        "error_type": "connection_error"
+                    }
+            except Exception as e:
+                response_time = round((time.time() - start_time) * 1000, 2)
+                return {
+                    "status": "unhealthy",
+                    "response_time_ms": response_time,
+                    "error": str(e),
+                    "error_type": "unexpected_error"
+                }
+        
+        # Should not reach here, but just in case
+        response_time = round((time.time() - start_time) * 1000, 2)
+        return {
+            "status": "unhealthy",
+            "response_time_ms": response_time,
+            "error": "Max retries exceeded",
+            "error_type": "retry_exhausted"
+        }
     
     async def check_openai_api(self) -> Dict[str, Any]:
         """Check OpenAI API connectivity"""
@@ -197,16 +266,23 @@ class HealthChecker:
             # Get queue statistics
             stats = await get_queue_stats()
             
-            # Check ARQ pool connectivity
-            pool = await get_arq_pool()
-            await pool.ping()
+            # Try to check ARQ pool connectivity
+            pool_connected = False
+            try:
+                pool = await get_arq_pool()
+                if pool:
+                    await pool.ping()
+                    pool_connected = True
+            except Exception as e:
+                logger.warning(f"Could not connect to ARQ pool: {e}")
+                pool_connected = False
             
             response_time = round((time.time() - start_time) * 1000, 2)
             
             # Determine health status based on queue metrics
             status = "healthy"
             if "error" in stats:
-                status = "unhealthy"
+                status = "degraded"  # Queue stats unavailable but might still be operational
             elif stats.get("queue_length", 0) > 100:  # High queue backlog
                 status = "degraded"
             elif stats.get("failed_jobs", 0) > stats.get("completed_jobs", 0):  # More failures than successes
@@ -216,7 +292,7 @@ class HealthChecker:
                 "status": status,
                 "response_time_ms": response_time,
                 "queue_stats": stats,
-                "pool_connected": True
+                "pool_connected": pool_connected
             }
             
         except Exception as e:
@@ -242,13 +318,32 @@ class HealthChecker:
             disk = psutil.disk_usage('/')
             
             # Determine status based on resource usage
+            # More lenient thresholds for development environments
             status = "healthy"
-            if cpu_percent > 90 or memory.percent > 90 or disk.percent > 90:
-                status = "critical"
-            elif cpu_percent > 70 or memory.percent > 70 or disk.percent > 80:
-                status = "degraded"
+            warnings = []
             
-            return {
+            # Critical: System is at risk of failure
+            if cpu_percent > 95:
+                status = "critical"
+                warnings.append("CPU usage critically high")
+            elif memory.percent > 95:
+                status = "critical"
+                warnings.append("Memory usage critically high")
+            elif disk.percent > 95:
+                status = "critical"
+                warnings.append("Disk usage critically high")
+            # Degraded: System performance may be impacted
+            elif cpu_percent > 80:
+                status = "degraded"
+                warnings.append("CPU usage high")
+            elif memory.percent > 85:
+                status = "degraded"
+                warnings.append("Memory usage high")
+            elif disk.percent > 85:
+                status = "degraded"
+                warnings.append("Disk usage high")
+            
+            result = {
                 "status": status,
                 "cpu": {
                     "percent": cpu_percent,
@@ -265,6 +360,11 @@ class HealthChecker:
                     "total_gb": round(disk.total / (1024**3), 2)
                 }
             }
+            
+            if warnings:
+                result["warnings"] = warnings
+            
+            return result
             
         except Exception as e:
             return {

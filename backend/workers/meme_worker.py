@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from pathlib import Path
 
 from core.config import settings
-from db.session import AsyncSessionLocal
+from db import session as db_session
 from models.models import MemeJob, GeneratedMeme, User, MemeTemplate
 from services.meme_ai import get_caption_generator, AIProvider
 from services.compositor import overlay_text_on_image
@@ -31,27 +31,32 @@ async def update_job_status(
 ) -> bool:
     """Update job status in database"""
     try:
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             update_data = {
                 "status": status,
                 "updated_at": datetime.now(timezone.utc)
             }
             
             if result_meme_ids is not None:
+                logger.debug(f"Updating job {job_id} with result_meme_ids: {result_meme_ids}")
                 update_data["result_meme_ids"] = result_meme_ids
             
             if error_message is not None:
+                logger.debug(f"Updating job {job_id} with error_message: {error_message}")
                 update_data["error_message"] = error_message
             
-            await db.execute(
+            logger.debug(f"Executing update for job {job_id}: {update_data}")
+            result = await db.execute(
                 update(MemeJob)
                 .where(MemeJob.id == job_id)
                 .values(**update_data)
             )
+            logger.debug(f"Update affected {result.rowcount} rows")
             await db.commit()
+            logger.info(f"Successfully updated job {job_id} to status={status}, meme_count={len(result_meme_ids) if result_meme_ids else 0}")
             return True
     except Exception as e:
-        logger.error(f"Error updating job {job_id}: {e}")
+        logger.error(f"Error updating job {job_id}: {e}", exc_info=True)
         return False
 
 async def get_template_by_id(db: AsyncSession, template_id: int) -> Optional[Dict[str, Any]]:
@@ -114,7 +119,7 @@ async def process_meme_generation(
             return {"status": "failed"}
 
         meme_ids = []
-        async with AsyncSessionLocal() as db:
+        async with db_session.AsyncSessionLocal() as db:
             for ai_meme in captions:
                 try:
                     template_id = int(ai_meme["meme_id"])
@@ -128,10 +133,17 @@ async def process_meme_generation(
                     
                     # 3. Storage Upload
                     object_key = f"memes/{uuid4()}.png"
-                    image_url = await upload_to_r2(image_path, object_key)
+                    upload_result = await upload_to_r2(image_path, object_key)
+                    
+                    # Extract URL from result (supports both R2 and local fallback)
+                    if upload_result and isinstance(upload_result, dict):
+                        image_url = upload_result.get('primary', None)
+                    else:
+                        image_url = None
+                    
                     if not image_url:
-                        # Fallback to local path (relative to static)
-                        image_url = f"/static/output/{image_path.name}"
+                        logger.error(f"Failed to upload or save meme for job {job_id}")
+                        continue
 
                     # 4. Save to DB
                     meme_id = str(uuid4())
@@ -147,14 +159,19 @@ async def process_meme_generation(
                     )
                     db.add(new_meme)
                     meme_ids.append(meme_id)
+                    logger.debug(f"Added meme {meme_id} to session for job {job_id}")
                 except Exception as e:
-                    logger.error(f"Error in single meme processing: {e}")
+                    logger.error(f"Error in single meme processing: {e}", exc_info=True)
+            logger.info(f"Committing {len(meme_ids)} memes to database for job {job_id}")
             await db.commit()
+            logger.info(f"Successfully committed {len(meme_ids)} memes for job {job_id}")
 
         if not meme_ids:
+            logger.warning(f"No memes generated for job {job_id}")
             await update_job_status(job_id, "failed", error_message="Failed to generate any memes")
             return {"status": "failed"}
 
+        logger.info(f"Job {job_id} generated {len(meme_ids)} memes: {meme_ids}")
         await update_job_status(job_id, "completed", result_meme_ids=meme_ids)
         return {"status": "completed", "meme_ids": meme_ids}
 
@@ -166,13 +183,15 @@ async def process_meme_generation(
 class WorkerSettings:
     functions = [process_meme_generation]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    queue_name = 'meme_generation'
+    queue_name = settings.arq_queue_name
     
     @staticmethod
-    async def startup(ctx):
+    async def on_startup(ctx):
         logger.info("Worker starting up")
+        db_session._init_engine()
+        logger.info("Database engine initialized in worker")
         
     @staticmethod
-    async def shutdown(ctx):
+    async def on_shutdown(ctx):
         logger.info("Worker shutting down")
         await close_arq_pool()

@@ -97,11 +97,11 @@ export function MemeGenerator() {
     setCurrentSuggestionIdx(0);
 
     try {
-      // Call /api/ai/suggest endpoint (prefer Gemini for synthesis)
+      // Call /api/ai/suggest endpoint (use default configured provider)
       const response = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), provider: 'gemini' }),
+        body: JSON.stringify({ prompt: prompt.trim() }),
       });
 
       if (!response.ok) {
@@ -175,15 +175,18 @@ export function MemeGenerator() {
   }, [selectedTemplate, textFields, prompt]);
 
   const pollJobStatus = useCallback(async (id: string) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60; // Increased to 60 seconds max
     let attempts = 0;
 
     const poll = async () => {
       try {
         const data = await apiClient.getJobStatus(id);
+        console.log(`[Poll ${attempts}] Job ${id} status:`, data.status, `memes:`, data.memes?.length || 0);
 
         const completedMemes = data.memes || data.result?.memes || [];
+        
         if (data.status === 'completed' && completedMemes.length > 0) {
+          console.log('✓ Job completed with memes:', completedMemes);
           setMemes(prev => [...completedMemes, ...prev]);
           triggerConfetti();
           toast.success(`Generated ${completedMemes.length} memes!`);
@@ -192,16 +195,24 @@ export function MemeGenerator() {
         }
 
         if (data.status === 'failed') {
+          console.error('✗ Job failed:', data.error);
           toast.error(data.error || 'Generation failed');
           setIsGenerating(false);
           return;
         }
 
-        if (data.status === 'processing' && attempts < maxAttempts) {
+        // Continue polling for both 'pending' and 'processing' states
+        if ((data.status === 'processing' || data.status === 'pending') && attempts < maxAttempts) {
           attempts++;
+          console.log(`Polling again in 1s (attempt ${attempts}/${maxAttempts})...`);
           setTimeout(poll, 1000);
         } else if (attempts >= maxAttempts) {
-          toast.error('Generation timed out');
+          console.error('✗ Polling timeout');
+          toast.error('Generation timed out after 60 seconds');
+          setIsGenerating(false);
+        } else {
+          console.warn(`✗ Unexpected status: ${data.status}`);
+          toast.error(`Unexpected job status: ${data.status}`);
           setIsGenerating(false);
         }
       } catch (error) {
@@ -256,7 +267,12 @@ export function MemeGenerator() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
       {/* Canvas for confetti */}
-      <canvas ref={confettiRef} style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none' }} />
+      <canvas 
+        ref={confettiRef} 
+        width={window.innerWidth}
+        height={window.innerHeight}
+        style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: 999 }} 
+      />
 
       {/* Main Content */}
       <div className="lg:col-span-3 space-y-8">
@@ -307,7 +323,7 @@ export function MemeGenerator() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe any situation, feeling, or random thought..."
-                  className="w-full h-32 bg-surface/50 backdrop-blur-sm border border-border hover:border-acid/40 focus:border-acid/60 rounded-lg px-4 py-3 text-primary placeholder:text-muted/70 focus:outline-none transition-all resize-none"
+                  className="w-full h-32 bg-[#1a1a1a] border border-border hover:border-acid/40 focus:border-acid/60 rounded-lg px-4 py-3 placeholder:text-secondary/50 focus:outline-none transition-all resize-none font-medium"
                 />
 
                 <div className="flex gap-3">
