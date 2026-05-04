@@ -253,7 +253,7 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
     
     # Fallback: Use local static storage
     try:
-        output_dir = Path(__file__).parent.parent / "public" / "output"
+        output_dir = Path(__file__).parent.parent.parent / "public" / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Copy file to output directory

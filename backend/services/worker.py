@@ -174,9 +174,13 @@ async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
                         "id": meme.id,
                         "template_name": meme.template_name,
                         "template_id": meme.template_id,
+                        "prompt": meme.prompt,
                         "meme_text": meme.meme_text,
                         "image_url": meme.image_url,
-                        "created_at": meme.created_at.isoformat()
+                        "created_at": meme.created_at.isoformat(),
+                        "like_count": meme.like_count,
+                        "share_count": meme.share_count,
+                        "is_public": meme.is_public
                     }
                     for meme in memes
                 ]
