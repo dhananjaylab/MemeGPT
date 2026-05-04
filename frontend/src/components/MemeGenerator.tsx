@@ -175,15 +175,18 @@ export function MemeGenerator() {
   }, [selectedTemplate, textFields, prompt]);
 
   const pollJobStatus = useCallback(async (id: string) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60; // Increased to 60 seconds max
     let attempts = 0;
 
     const poll = async () => {
       try {
         const data = await apiClient.getJobStatus(id);
+        console.log(`[Poll ${attempts}] Job ${id} status:`, data.status, `memes:`, data.memes?.length || 0);
 
         const completedMemes = data.memes || data.result?.memes || [];
+        
         if (data.status === 'completed' && completedMemes.length > 0) {
+          console.log('✓ Job completed with memes:', completedMemes);
           setMemes(prev => [...completedMemes, ...prev]);
           triggerConfetti();
           toast.success(`Generated ${completedMemes.length} memes!`);
@@ -192,16 +195,24 @@ export function MemeGenerator() {
         }
 
         if (data.status === 'failed') {
+          console.error('✗ Job failed:', data.error);
           toast.error(data.error || 'Generation failed');
           setIsGenerating(false);
           return;
         }
 
-        if (data.status === 'processing' && attempts < maxAttempts) {
+        // Continue polling for both 'pending' and 'processing' states
+        if ((data.status === 'processing' || data.status === 'pending') && attempts < maxAttempts) {
           attempts++;
+          console.log(`Polling again in 1s (attempt ${attempts}/${maxAttempts})...`);
           setTimeout(poll, 1000);
         } else if (attempts >= maxAttempts) {
-          toast.error('Generation timed out');
+          console.error('✗ Polling timeout');
+          toast.error('Generation timed out after 60 seconds');
+          setIsGenerating(false);
+        } else {
+          console.warn(`✗ Unexpected status: ${data.status}`);
+          toast.error(`Unexpected job status: ${data.status}`);
           setIsGenerating(false);
         }
       } catch (error) {

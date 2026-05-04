@@ -149,7 +149,10 @@ async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
             job = result.scalar_one_or_none()
             
             if not job:
+                logger.warning(f"Job {job_id} not found in database")
                 return None
+            
+            logger.debug(f"Found job {job_id}: status={job.status}, result_meme_ids={job.result_meme_ids}")
             
             job_data = {
                 "id": job.id,
@@ -159,10 +162,12 @@ async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
             }
             
             if job.status == "completed" and job.result_meme_ids:
+                logger.debug(f"Job {job_id} completed with meme_ids: {job.result_meme_ids}")
                 meme_result = await db.execute(
                     select(GeneratedMeme).where(GeneratedMeme.id.in_(job.result_meme_ids))
                 )
                 memes = meme_result.scalars().all()
+                logger.debug(f"Found {len(memes)} memes in database for job {job_id}")
                 
                 job_data["memes"] = [
                     {
@@ -175,12 +180,14 @@ async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
                     }
                     for meme in memes
                 ]
+                logger.info(f"Returning {len(job_data['memes'])} memes for job {job_id}")
             elif job.status == "failed":
                 job_data["error"] = job.error_message or "Unknown error"
             
+            logger.debug(f"Job status response for {job_id}: {job_data}")
             return job_data
     except Exception as e:
-        logger.error(f"Error retrieving job {job_id}: {e}")
+        logger.error(f"Error retrieving job {job_id}: {e}", exc_info=True)
         return None
 
 async def cleanup_old_jobs(days_old: int = 7) -> int:

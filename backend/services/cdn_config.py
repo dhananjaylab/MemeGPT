@@ -134,8 +134,7 @@ class CDNManager:
                 'Body': file_data,
                 'ContentType': content_type,
                 'CacheControl': cache_control,
-                'Metadata': metadata,
-                'Tagging': "public=true&content-type=image"
+                'Metadata': metadata
             }
             
             # Only add specific supported headers to top-level params
