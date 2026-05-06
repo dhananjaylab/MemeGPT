@@ -73,56 +73,21 @@ class R2ConfigManager:
             return False
 
     def configure_public_access_policy(self) -> bool:
-        """Configure bucket policy for public read access to images"""
-        policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Sid": "PublicReadGetObject",
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{self.bucket_name}/*",
-                    "Condition": {
-                        "StringLike": {
-                            "s3:ExistingObjectTag/public": "true"
-                        }
-                    }
-                },
-                {
-                    "Sid": "PublicReadMemes",
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{self.bucket_name}/memes/*"
-                },
-                {
-                    "Sid": "PublicReadTemplates",
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{self.bucket_name}/templates/*"
-                },
-                {
-                    "Sid": "DenyDirectAccess",
-                    "Effect": "Deny",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{self.bucket_name}/private/*"
-                }
-            ]
-        }
-        
-        try:
-            self.client.put_bucket_policy(
-                Bucket=self.bucket_name,
-                Policy=json.dumps(policy)
-            )
-            logger.info(f"Public access policy configured for bucket {self.bucket_name}")
-            return True
-        except ClientError as e:
-            logger.error(f"Failed to configure bucket policy: {e}")
-            return False
+        """
+        Instructions for public access setup.
+        Note: Cloudflare R2 does NOT support PutBucketPolicy via S3 API.
+        Public access must be enabled in the Cloudflare Dashboard by:
+        1. Enabling the R2.dev subdomain for the bucket
+        2. OR connecting a custom domain
+        """
+        logger.warning(
+            f"Cannot configure public access policy via API for bucket {self.bucket_name}. "
+            "Cloudflare R2 does not support S3 Bucket Policies. "
+            "Please enable 'Public R2.dev subdomain' or connect a 'Custom Domain' "
+            "in the Cloudflare Dashboard for this bucket."
+        )
+        # We return True here because we've handled the "unsupported" operation by notifying the user
+        return True
 
     def configure_lifecycle_policy(self) -> bool:
         """Configure lifecycle policy for automatic cleanup of temporary files"""

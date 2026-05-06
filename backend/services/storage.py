@@ -249,7 +249,16 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
         else:
             logger.info("R2 credentials not configured, using local storage fallback")
     except Exception as e:
-        logger.warning(f"R2 upload failed ({str(e)}), falling back to local storage")
+        error_msg = str(e)
+        if "Unauthorized" in error_msg:
+            logger.error(
+                "CRITICAL: R2 storage authentication failed (Unauthorized). "
+                "The provided R2 credentials in .env are invalid or lack permissions. "
+                "Check R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. "
+                "Falling back to local storage for now."
+            )
+        else:
+            logger.warning(f"R2 upload failed ({error_msg}), falling back to local storage")
     
     # Fallback: Use local static storage
     try:
