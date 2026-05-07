@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Wand2, Loader2, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Zap, Edit3 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,6 +52,16 @@ export function MemeGenerator() {
   // Results
   const [memes, setMemes] = useState<GeneratedMeme[]>([]);
   const confettiRef = useRef<HTMLCanvasElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   // Handle mode switch
   const switchToManualWithSuggestion = useCallback((suggestion: AISuggestion) => {
@@ -160,7 +170,7 @@ export function MemeGenerator() {
       });
       
       if (result.job_id) {
-        pollJobStatus(result.job_id);
+        listenToJobStatus(result.job_id);
       } else if (result.memes) {
         setMemes(prev => [...(result.memes || []), ...prev]);
         triggerConfetti();
@@ -174,55 +184,64 @@ export function MemeGenerator() {
     }
   }, [selectedTemplate, textFields, prompt]);
 
-  const pollJobStatus = useCallback(async (id: string) => {
-    const maxAttempts = 60; // Increased to 60 seconds max
-    let attempts = 0;
 
-    const poll = async () => {
+
+  const listenToJobStatus = useCallback((id: string) => {
+    // Cleanup previous connection if any
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    console.log(`[SSE] Starting stream for job ${id}`);
+    const eventSource = apiClient.getJobStatusStream(id);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
       try {
-        const data = await apiClient.getJobStatus(id);
-        console.log(`[Poll ${attempts}] Job ${id} status:`, data.status, `memes:`, data.memes?.length || 0);
+        const data: JobStatusResponse = JSON.parse(event.data);
+        console.log(`[SSE] Job ${id} update:`, data.status, `memes:`, data.memes?.length || 0);
 
         const completedMemes = data.memes || data.result?.memes || [];
         
         if (data.status === 'completed' && completedMemes.length > 0) {
-          console.log('✓ Job completed with memes:', completedMemes);
+          console.log('[SSE] ✓ Job completed');
           setMemes(prev => [...completedMemes, ...prev]);
           triggerConfetti();
           toast.success(`Generated ${completedMemes.length} memes!`);
           setIsGenerating(false);
-          return;
-        }
-
-        if (data.status === 'failed') {
-          console.error('✗ Job failed:', data.error);
+          eventSource.close();
+          eventSourceRef.current = null;
+        } else if (data.status === 'failed') {
+          console.error('[SSE] ✗ Job failed:', data.error);
           toast.error(data.error || 'Generation failed');
           setIsGenerating(false);
-          return;
-        }
-
-        // Continue polling for both 'pending' and 'processing' states
-        if ((data.status === 'processing' || data.status === 'pending') && attempts < maxAttempts) {
-          attempts++;
-          console.log(`Polling again in 1s (attempt ${attempts}/${maxAttempts})...`);
-          setTimeout(poll, 1000);
-        } else if (attempts >= maxAttempts) {
-          console.error('✗ Polling timeout');
-          toast.error('Generation timed out after 60 seconds');
-          setIsGenerating(false);
-        } else {
-          console.warn(`✗ Unexpected status: ${data.status}`);
-          toast.error(`Unexpected job status: ${data.status}`);
-          setIsGenerating(false);
+          eventSource.close();
+          eventSourceRef.current = null;
         }
       } catch (error) {
-        console.error('Polling error:', error);
-        toast.error('Failed to check generation status');
-        setIsGenerating(false);
+        console.error('[SSE] Error parsing event data:', error);
       }
     };
 
-    poll();
+    eventSource.onerror = (error) => {
+      console.error('[SSE] Stream error:', error);
+      // Fallback to one-time poll if SSE fails significantly, 
+      // but for now we just error out and allow manual retry if needed
+      toast.error('Connection lost. Please check your internet.');
+      setIsGenerating(false);
+      eventSource.close();
+      eventSourceRef.current = null;
+    };
+
+    // Safety timeout - close after 2 minutes if still open
+    setTimeout(() => {
+      if (eventSourceRef.current === eventSource) {
+        console.log('[SSE] Safety timeout closing stream');
+        eventSource.close();
+        eventSourceRef.current = null;
+        setIsGenerating(false);
+      }
+    }, 120000);
   }, []);
 
   const triggerConfetti = () => {
