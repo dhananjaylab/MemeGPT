@@ -14,6 +14,11 @@ class AIProvider(str, Enum):
     BOTH = "both"  # Uses both providers and combines results
 
 
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Initialize OpenAI client
 openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
@@ -23,11 +28,23 @@ if settings.gemini_api_key:
 
 ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent
 
+# Global cache for meme data to avoid repeated disk reads
+_MEME_DATA_CACHE: Optional[str] = None
+
 def load_meme_data_from_json() -> str:
-    """Load meme template data of the public/meme_data.json"""
+    """Load meme template data with in-memory caching"""
+    global _MEME_DATA_CACHE
+    if _MEME_DATA_CACHE is not None:
+        return _MEME_DATA_CACHE
+        
     meme_data_path = ROOT_DIRECTORY / "public" / "meme_data.json"
-    with open(meme_data_path, "r", encoding="utf-8") as file:
-        return file.read()
+    try:
+        with open(meme_data_path, "r", encoding="utf-8") as file:
+            _MEME_DATA_CACHE = file.read()
+            return _MEME_DATA_CACHE
+    except Exception as e:
+        logger.error(f"Failed to load meme_data.json: {e}")
+        return "[]"
 
 def get_system_instructions(meme_data_text: str) -> str:
     """Generate system instructions for OpenAI"""
@@ -63,7 +80,7 @@ Example output:
 async def generate_meme_captions(user_prompt: str) -> Optional[List[Dict[str, Any]]]:
     """Call OpenAI GPT-4o to generate meme content"""
     if not openai_client:
-        print("OpenAI API key not configured")
+        logger.error("OpenAI API key not configured")
         return None
     
     meme_data_text = load_meme_data_from_json()
@@ -87,7 +104,7 @@ async def generate_meme_captions(user_prompt: str) -> Optional[List[Dict[str, An
         data = json.loads(content)
         return data.get("output", [])
     except Exception as e:
-        print(f"Error calling OpenAI: {e}")
+        logger.error(f"Error calling OpenAI: {e}")
         return None
 
 
@@ -112,7 +129,7 @@ Generate creative, humorous, and fitting meme captions for the user's prompt. Fo
 async def generate_meme_captions_with_gemini(user_prompt: str) -> Optional[List[Dict[str, Any]]]:
     """Call Google Gemini to generate meme content"""
     if not settings.gemini_api_key:
-        print("Gemini API key not configured")
+        logger.error("Gemini API key not configured")
         return None
     
     meme_data_text = load_meme_data_from_json()
@@ -137,7 +154,7 @@ async def generate_meme_captions_with_gemini(user_prompt: str) -> Optional[List[
         data = json.loads(response.text)
         return data.get("output", [])
     except Exception as e:
-        print(f"Error calling Gemini: {e}")
+        logger.error(f"Error calling Gemini: {e}")
         return None
 
 
