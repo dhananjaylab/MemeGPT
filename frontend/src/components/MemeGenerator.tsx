@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Wand2, Loader2, Sparkles, RefreshCw, ChevronLeft, ChevronRight,
   Zap, Edit3, X,

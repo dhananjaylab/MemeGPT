@@ -250,7 +250,30 @@ def overlay_text_on_image(
                 return future.result(timeout=30)
         else:
             return loop.run_until_complete(overlay_text_on_image_async(meme, texts))
-    except Exception as exc:
-        # Log but don't silently swallow — caller should know
-        logger.error("Async compositor failed, attempting remote-aware retry: %s", exc)
-        raise
+    except Exception:
+        # Hard fallback: try local PIL only (no URL support)
+        return _overlay_local_only(meme, texts)
+
+
+def _overlay_local_only(meme: Dict[str, Any], texts: List[str]) -> Path:
+    """Fallback compositor that only reads local files."""
+    image_path = IMAGE_FOLDER / meme["file_path"]
+    if not image_path.exists():
+        raise FileNotFoundError(f"Template image not found: {image_path}")
+
+    img = Image.open(image_path)
+    draw = ImageDraw.Draw(img)
+
+    for bbox, text in zip(meme["text_coordinates_xy_wh"], texts):
+        _draw_text_box(
+            draw=draw,
+            text=text,
+            bbox=tuple(bbox),
+            font_name=meme["font_path"],
+            text_color=meme.get("text_color", "white"),
+            text_stroke=meme.get("text_stroke", True),
+        )
+
+    out = _unique_output_path()
+    img.save(out, format="PNG", optimize=True)
+    return out

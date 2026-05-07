@@ -113,19 +113,14 @@ class MemeJob(Base):
 
     def mark_as_processing(self) -> None:
         self.status = "processing"
-        # Explicit timestamp for ARQ worker context where SQLAlchemy
-        # onupdate may not trigger (e.g. raw update() queries).
-        self.updated_at = func.now()
 
     def mark_as_completed(self, meme_ids: List[str]) -> None:
         self.status = "completed"
         self.result_meme_ids = meme_ids
-        self.updated_at = func.now()
 
     def mark_as_failed(self, error: str) -> None:
         self.status = "failed"
         self.error_message = error
-        self.updated_at = func.now()
 
 
 class MemeTemplate(Base):

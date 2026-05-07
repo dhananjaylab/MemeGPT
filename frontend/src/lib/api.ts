@@ -141,14 +141,6 @@ class APIClient {
     return this.request<JobStatusResponse>(`/jobs/${jobId}`);
   }
 
-  // Job status streaming (SSE)
-  getJobStatusStream(jobId: string): EventSource {
-    // EventSource doesn't support custom headers easily, 
-    // so we use the URL directly. The browser will handle the request.
-    const url = `${this.baseURL}/jobs/${jobId}/stream`;
-    return new EventSource(url);
-  }
-
   // Meme management
   async getMemes(params: {
     page?: number;
