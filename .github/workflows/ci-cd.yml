@@ -92,11 +92,6 @@ jobs:
         pip install -r backend/requirements.txt
         pip install pytest pytest-asyncio pytest-cov
     
-    - name: Set up test environment
-      run: |
-        export DATABASE_URL=postgresql://memegpt:test_password@localhost:5432/memegpt_test
-        export REDIS_URL=redis://localhost:6379/0
-    
     - name: Run unit tests
       env:
         DATABASE_URL: postgresql://memegpt:test_password@localhost:5432/memegpt_test
