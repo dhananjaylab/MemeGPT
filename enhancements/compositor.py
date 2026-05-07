@@ -7,7 +7,6 @@ Improvements over v1:
   • Sync wrapper kept for backward-compat with the ARQ worker
   • Better kerning: uses `getbbox` instead of deprecated `getsize`
   • Gen-Z font auto-scaling tuned for short, punchy captions
-  • Remote-first: prefers CDN URLs over local files when available
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ import asyncio
 import io
 import logging
 import textwrap
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from uuid import uuid4
@@ -84,37 +84,29 @@ async def _load_template_image(
     image_url: Optional[str] = None,
 ) -> Image.Image:
     """
-    Load a template image — remote-first strategy.
+    Load a template image.
 
     Priority:
-      1. Remote URL if available (downloaded + cached via Redis)
-      2. Local file in public/frames/ as fallback
-    This minimises dependency on local filesystem state.
+      1. Local file in public/frames/
+      2. Remote URL (downloaded + cached via Redis)
     """
-    # ── Try remote URL first (preferred for CDN-hosted templates) ────────────
-    if image_url:
-        resolved_url = image_url
-        # Strip our own proxy wrapper so we hit the origin CDN
-        if resolved_url.startswith("/api/memes/proxy-image?url="):
-            resolved_url = resolved_url[len("/api/memes/proxy-image?url="):]
-        elif resolved_url.startswith("/frames/"):
-            # This is a local-relative URL — fall through to local check
-            resolved_url = None
-
-        if resolved_url and resolved_url.startswith("http"):
-            try:
-                logger.info("Fetching remote template: %s", resolved_url[:100])
-                return await _fetch_remote_image(resolved_url)
-            except Exception as exc:
-                logger.warning("Remote fetch failed (%s), trying local: %s", resolved_url[:60], exc)
-
-    # ── Fallback: local file ─────────────────────────────────────────────────
     local = IMAGE_FOLDER / file_path
     if local.exists():
         return Image.open(local)
 
+    if image_url:
+        # Strip our own proxy wrapper so we hit the origin CDN
+        if image_url.startswith("/api/memes/proxy-image?url="):
+            image_url = image_url[len("/api/memes/proxy-image?url="):]
+        elif image_url.startswith("/frames/"):
+            # Edge case: relative local URL that doesn't exist on disk
+            raise FileNotFoundError(f"Local template missing: {local}")
+
+        logger.info("Downloading remote template: %s", image_url[:100])
+        return await _fetch_remote_image(image_url)
+
     raise FileNotFoundError(
-        f"Template image not found: remote URL={image_url!r}, local={local}"
+        f"Template image not found locally ({local}) and no image_url provided."
     )
 
 

@@ -512,34 +512,6 @@ async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
 
 # ── Individual meme actions ───────────────────────────────────────────────────
 
-@router.get("/proxy-image")
-async def proxy_template_image(url: str):
-    if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Invalid URL scheme")
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(url, timeout=15.0, headers={"User-Agent": "MemeGPT/2.0"})
-            resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "image/jpeg")
-            if not content_type.startswith("image/"):
-                raise HTTPException(status_code=400, detail="URL is not an image")
-            return Response(
-                content=resp.content,
-                media_type=content_type,
-                headers={
-                    "Cache-Control": "public, max-age=86400, immutable",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Content-Type-Options": "nosniff",
-                },
-            )
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail="Failed to fetch image")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Image fetch timeout")
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
 @router.get("/{meme_id}", response_model=MemeResponse)
 async def get_meme(meme_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
@@ -657,3 +629,31 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
     return {"message": "Templates seeded", "added": added, "updated": updated, "total": added + updated}
 
 
+# ── Image proxy ───────────────────────────────────────────────────────────────
+
+@router.get("/proxy-image")
+async def proxy_template_image(url: str):
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.get(url, timeout=15.0, headers={"User-Agent": "MemeGPT/2.0"})
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL is not an image")
+            return Response(
+                content=resp.content,
+                media_type=content_type,
+                headers={
+                    "Cache-Control": "public, max-age=86400, immutable",
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Failed to fetch image")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Image fetch timeout")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))

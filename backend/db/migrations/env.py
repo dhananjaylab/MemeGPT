@@ -1,7 +1,7 @@
 import os
 import sys
-import re
 from logging.config import fileConfig
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 from sqlalchemy import pool, create_engine
 from sqlalchemy.engine import Connection
 from alembic import context
@@ -19,12 +19,32 @@ load_dotenv(env_file, override=True)
 
 # Get database URL from environment or use default
 database_url = os.getenv(
-    "DATABASE_URL", 
+    "DATABASE_URL",
     "postgresql+psycopg2://user:password@localhost/memegpt"
 )
 
-# Convert postgresql:// to postgresql+psycopg2://
-database_url = re.sub(r'^postgresql:', 'postgresql+psycopg2:', database_url)
+
+def _to_sync_migration_url(url: str) -> str:
+    """Normalize async DB URLs to a sync psycopg2 URL for Alembic."""
+    if url.startswith("postgresql+asyncpg://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql+asyncpg://"):]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+
+    parsed = urlparse(url)
+    if not parsed.scheme.startswith("postgresql+psycopg2"):
+        return url
+
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    # asyncpg commonly uses ssl=require; psycopg2 expects sslmode=require
+    if "ssl" in query and "sslmode" not in query:
+        query["sslmode"] = query.pop("ssl")
+
+    new_query = urlencode(query, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
+
+
+database_url = _to_sync_migration_url(database_url)
 
 from db.session import Base
 from models.models import User, GeneratedMeme, MemeJob, MemeTemplate

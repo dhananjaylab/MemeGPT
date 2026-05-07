@@ -41,6 +41,28 @@ export function MemePreview({
   const [imageLoadError, setImageLoadError] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: canvasWidth, height: canvasHeight });
+
+  const isPixelCoordinateMode = texts.some(
+    (t) => t.x > 100 || t.y > 100 || (t.width || 0) > 100 || (t.height || 0) > 100
+  );
+
+  const toAbsolutePosition = (textItem: MemePreviewProps['texts'][number]): TextPosition => {
+    if (isPixelCoordinateMode) {
+      return {
+        x: (textItem.x / imageNaturalSize.width) * canvasWidth,
+        y: (textItem.y / imageNaturalSize.height) * canvasHeight,
+        width: ((textItem.width || 40) / imageNaturalSize.width) * canvasWidth,
+        height: ((textItem.height || 20) / imageNaturalSize.height) * canvasHeight,
+      };
+    }
+    return {
+      x: (textItem.x / 100) * canvasWidth,
+      y: (textItem.y / 100) * canvasHeight,
+      width: ((textItem.width || 40) / 100) * canvasWidth,
+      height: ((textItem.height || 20) / 100) * canvasHeight,
+    };
+  };
 
   useEffect(() => {
     setLocked(isLocked);
@@ -68,18 +90,14 @@ export function MemePreview({
     img.onload = () => {
       setIsImageLoading(false);
       setImageLoadError(false);
+      setImageNaturalSize({ width: img.naturalWidth || canvasWidth, height: img.naturalHeight || canvasHeight });
       
       // Draw base image
       ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
 
       // Draw all text overlays
       texts.forEach((textItem) => {
-        const absPosition: TextPosition = {
-          x: (textItem.x / 100) * canvasWidth,
-          y: (textItem.y / 100) * canvasHeight,
-          width: ((textItem.width || 40) / 100) * canvasWidth,
-          height: ((textItem.height || 20) / 100) * canvasHeight,
-        };
+        const absPosition = toAbsolutePosition(textItem);
 
         drawText(
           ctx,
@@ -146,12 +164,7 @@ export function MemePreview({
 
     // Check if clicked on any text region
     for (const textItem of texts) {
-      const absPosition: TextPosition = {
-        x: (textItem.x / 100) * canvasWidth,
-        y: (textItem.y / 100) * canvasHeight,
-        width: ((textItem.width || 40) / 100) * canvasWidth,
-        height: ((textItem.height || 20) / 100) * canvasHeight,
-      };
+      const absPosition = toAbsolutePosition(textItem);
 
       if (
         x >= absPosition.x &&
@@ -183,13 +196,25 @@ export function MemePreview({
     const textItem = texts.find((t) => t.id === draggedTextId);
     if (!textItem) return;
 
-    // Calculate new percentage position
-    const newX = textItem.x + (deltaX / canvasWidth) * 100;
-    const newY = textItem.y + (deltaY / canvasHeight) * 100;
+    const xScale = isPixelCoordinateMode
+      ? imageNaturalSize.width / canvasWidth
+      : 100 / canvasWidth;
+    const yScale = isPixelCoordinateMode
+      ? imageNaturalSize.height / canvasHeight
+      : 100 / canvasHeight;
 
-    // Clamp to canvas bounds
-    const clampedX = Math.max(0, Math.min(newX, 100 - (textItem.width || 40)));
-    const clampedY = Math.max(0, Math.min(newY, 100 - (textItem.height || 20)));
+    const newX = textItem.x + deltaX * xScale;
+    const newY = textItem.y + deltaY * yScale;
+
+    const maxX = isPixelCoordinateMode
+      ? imageNaturalSize.width - (textItem.width || 40)
+      : 100 - (textItem.width || 40);
+    const maxY = isPixelCoordinateMode
+      ? imageNaturalSize.height - (textItem.height || 20)
+      : 100 - (textItem.height || 20);
+
+    const clampedX = Math.max(0, Math.min(newX, maxX));
+    const clampedY = Math.max(0, Math.min(newY, maxY));
 
     onTextPositionUpdate?.(draggedTextId, {
       x: clampedX,

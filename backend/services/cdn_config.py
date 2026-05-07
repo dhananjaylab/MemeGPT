@@ -148,7 +148,16 @@ class CDNManager:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to upload {object_key} with CDN headers: {e}")
+            error_msg = str(e)
+            if "Unauthorized" in error_msg:
+                logger.error(
+                    f"R2 Upload Unauthorized for {object_key}. "
+                    "This usually means the R2 API Token is invalid or lacks 'Edit' permissions. "
+                    "Please verify R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY in .env, "
+                    "and ensure the token has 'Object Read & Write' permissions for the bucket."
+                )
+            else:
+                logger.error(f"Failed to upload {object_key} with CDN headers: {e}")
             return False
 
     def update_existing_object_headers(self, object_key: str) -> bool:

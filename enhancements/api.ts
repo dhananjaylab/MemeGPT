@@ -1,7 +1,7 @@
-import type { 
-  GeneratedMeme, 
-  GenerateMemeResponse, 
-  JobStatusResponse, 
+import type {
+  GeneratedMeme,
+  GenerateMemeResponse,
+  JobStatusResponse,
   MemeListResponse,
   TrendingResponse,
   User,
@@ -9,7 +9,7 @@ import type {
   GenerateMemeRequest,
   ShareMemeRequest,
   CheckoutResponse,
-  MemeStats
+  MemeStats,
 } from './types';
 
 // ─── Quick generation types ───────────────────────────────────────────────────
@@ -30,29 +30,21 @@ export interface QuickMemeResponse {
   generation_time_ms: number;
 }
 
-
+// ─── API client ───────────────────────────────────────────────────────────────
 
 class APIClient {
   private baseURL: string;
   private defaultHeaders: HeadersInit;
 
-  constructor(baseURL: string = '') {
-    // In Vite, we'll use /api as the prefix which our vite.config proxy will handle
+  constructor(baseURL = '') {
     this.baseURL = baseURL || '/api';
-    this.defaultHeaders = {
-      'Content-Type': 'application/json',
-    };
+    this.defaultHeaders = { 'Content-Type': 'application/json' };
   }
 
-  private async request<T>(
-    endpoint: string, 
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
-    
-    // Auto-inject auth headers from localStorage
     const authHeaders = this.getAuthHeaders();
-    
+
     const config: RequestInit = {
       ...options,
       headers: {
@@ -64,36 +56,24 @@ class APIClient {
 
     try {
       const response = await fetch(url, config);
-      
+
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        let errorDetails = null;
-
         try {
           const errorData = await response.json();
-          // FastAPI often uses 'detail' for error messages
           errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
-          errorDetails = errorData.details || null;
-        } catch (e) {
-          // Fallback if response is not JSON
-        }
+        } catch (_) {}
 
         const error = new Error(errorMessage) as any;
         error.status = response.status;
-        error.details = errorDetails;
-        
-        // Specific handling for 429
-        if (response.status === 429) {
-          error.isRateLimit = true;
-        }
-
+        if (response.status === 429) error.isRateLimit = true;
         throw error;
       }
 
       return await response.json();
     } catch (error) {
       if (!(error as any).status) {
-        console.error(`API request network error: ${endpoint}`, error);
+        console.error(`API network error: ${endpoint}`, error);
       }
       throw error;
     }
@@ -101,23 +81,14 @@ class APIClient {
 
   private getAuthHeaders(token?: string): HeadersInit {
     const headers: HeadersInit = {};
-    
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    
-    // Try to get token from localStorage if not provided
-    if (typeof window !== 'undefined' && !token) {
-      const storedToken = localStorage.getItem('auth_token');
-      if (storedToken) {
-        headers.Authorization = `Bearer ${storedToken}`;
-      }
-    }
-    
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const t = token || stored;
+    if (t) headers.Authorization = `Bearer ${t}`;
     return headers;
   }
 
-  // Meme generation
+  // ── Meme generation ────────────────────────────────────────────────────────
+
   async generateMemes(request: GenerateMemeRequest): Promise<GenerateMemeResponse> {
     return this.request<GenerateMemeResponse>('/memes/generate', {
       method: 'POST',
@@ -136,29 +107,29 @@ class APIClient {
     });
   }
 
-  // Job status polling
+  // ── Job polling ────────────────────────────────────────────────────────────
+
   async getJobStatus(jobId: string): Promise<JobStatusResponse> {
     return this.request<JobStatusResponse>(`/jobs/${jobId}`);
   }
 
-  // Meme management
-  async getMemes(params: {
-    page?: number;
-    limit?: number;
-    sort?: string;
-    search?: string;
-    user?: string;
-  } = {}): Promise<MemeListResponse> {
-    const searchParams = new URLSearchParams();
-    
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
+  // ── Meme CRUD ──────────────────────────────────────────────────────────────
 
-    const query = searchParams.toString();
-    return this.request<MemeListResponse>(`/memes${query ? `?${query}` : ''}`);
+  async getMemes(
+    params: {
+      page?: number;
+      limit?: number;
+      sort?: string;
+      search?: string;
+      user?: string;
+    } = {},
+  ): Promise<MemeListResponse> {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined) searchParams.append(k, v.toString());
+    });
+    const q = searchParams.toString();
+    return this.request<MemeListResponse>(`/memes${q ? `?${q}` : ''}`);
   }
 
   async getMeme(id: string): Promise<GeneratedMeme> {
@@ -185,22 +156,20 @@ class APIClient {
     });
   }
 
-  // Trending topics
+  // ── Trending ───────────────────────────────────────────────────────────────
+
   async getTrendingTopics(): Promise<TrendingResponse> {
     return this.request<TrendingResponse>('/trending/topics');
   }
 
-  // User management
+  // ── Users ──────────────────────────────────────────────────────────────────
+
   async getCurrentUser(token?: string): Promise<User> {
-    return this.request<User>('/auth/me', {
-      headers: this.getAuthHeaders(token),
-    });
+    return this.request<User>('/auth/me', { headers: this.getAuthHeaders(token) });
   }
 
   async getUserMe(token?: string): Promise<User> {
-    return this.request<User>('/users/me', {
-      headers: this.getAuthHeaders(token),
-    });
+    return this.request<User>('/users/me', { headers: this.getAuthHeaders(token) });
   }
 
   async updateUser(updates: Partial<User>, token?: string): Promise<User> {
@@ -218,11 +187,13 @@ class APIClient {
     });
   }
 
-  // Billing/Stripe
-  async createCheckoutSession(plan: 'pro' | 'api', options: {
-    success_url: string;
-    cancel_url: string;
-  }, token?: string): Promise<CheckoutResponse> {
+  // ── Billing ────────────────────────────────────────────────────────────────
+
+  async createCheckoutSession(
+    plan: 'pro' | 'api',
+    options: { success_url: string; cancel_url: string },
+    token?: string,
+  ): Promise<CheckoutResponse> {
     return this.request<CheckoutResponse>('/stripe/checkout', {
       method: 'POST',
       headers: this.getAuthHeaders(token),
@@ -237,70 +208,62 @@ class APIClient {
     });
   }
 
-  // Analytics
+  // ── Analytics ──────────────────────────────────────────────────────────────
+
   async getMemeStats(token?: string): Promise<MemeStats> {
     return this.request<MemeStats>('/analytics/stats', {
       headers: this.getAuthHeaders(token),
     });
   }
 
-  // Health check
+  // ── Health ─────────────────────────────────────────────────────────────────
+
   async healthCheck(): Promise<{ status: string; version: string }> {
     return this.request<{ status: string; version: string }>('/health');
   }
 }
 
-// Create singleton instance
+// ─── Singleton ────────────────────────────────────────────────────────────────
+
 export const apiClient = new APIClient();
 
-// Convenience functions
-export const generateMemes = (prompt: string, options: Partial<GenerateMemeRequest> = {}) => {
-  return apiClient.generateMemes({ prompt, ...options });
-};
+// ─── Convenience wrappers ─────────────────────────────────────────────────────
 
-export const generateMemeQuick = (request: QuickMemeRequest) => {
-  return apiClient.generateMemeQuick(request);
-};
+export const generateMemes = (
+  prompt: string,
+  options: Partial<GenerateMemeRequest> = {},
+) => apiClient.generateMemes({ prompt, ...options });
 
-export const getMemes = (params?: Parameters<typeof apiClient.getMemes>[0]) => {
-  return apiClient.getMemes(params);
-};
+export const generateMemeQuick = (request: QuickMemeRequest) =>
+  apiClient.generateMemeQuick(request);
 
-export const getMeme = (id: string) => {
-  return apiClient.getMeme(id);
-};
+export const getMemes = (params?: Parameters<typeof apiClient.getMemes>[0]) =>
+  apiClient.getMemes(params);
 
-export const getTrendingTopics = () => {
-  return apiClient.getTrendingTopics();
-};
+export const getMeme = (id: string) => apiClient.getMeme(id);
 
-export const likeMeme = (id: string) => {
-  return apiClient.likeMeme(id);
-};
+export const getTrendingTopics = () => apiClient.getTrendingTopics();
 
-export const shareMeme = (id: string, platform: ShareMemeRequest['platform']) => {
-  return apiClient.shareMeme(id, { platform });
-};
+export const likeMeme = (id: string) => apiClient.likeMeme(id);
 
-// Error handling utility
-export const isAPIError = (error: any): error is APIError => {
-  return error && typeof error === 'object' && 'error' in error;
-};
+export const shareMeme = (id: string, platform: ShareMemeRequest['platform']) =>
+  apiClient.shareMeme(id, { platform });
 
-// Rate limiting utility
+export const isAPIError = (error: any): error is APIError =>
+  error && typeof error === 'object' && 'error' in error;
+
+// ─── Rate limiter ─────────────────────────────────────────────────────────────
+
 class RateLimiter {
   private requests: number[] = [];
-  private maxRequests: number;
-  private windowMs: number;
-
-  constructor(maxRequests: number = 10, windowMs: number = 60000) {
-    this.maxRequests = maxRequests;
-    this.windowMs = windowMs;
-  }
+  constructor(
+    private maxRequests = 10,
+    private windowMs = 60_000,
+  ) {}
 
   canMakeRequest(): boolean {
     const now = Date.now();
-    this.requests = this.requests.filter(time => now - time < this.windowMs);
+    this.requests = this.requests.filter((t) => now - t < this.windowMs);
     return this.requests.length < this.maxRequests;
   }
 
@@ -311,28 +274,22 @@ class RateLimiter {
 
 export const rateLimiter = new RateLimiter();
 
-// Retry utility for failed requests
+// ─── Retry helper ─────────────────────────────────────────────────────────────
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxRetries: number = 3,
-  delay: number = 1000
+  maxRetries = 3,
+  delay = 1000,
 ): Promise<T> {
-  let lastError: Error;
-
+  let lastError!: Error;
   for (let i = 0; i <= maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      
-      if (i === maxRetries) {
-        throw lastError;
-      }
-      
-      // Exponential backoff
-      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+      if (i === maxRetries) throw lastError;
+      await new Promise((r) => setTimeout(r, delay * Math.pow(2, i)));
     }
   }
-
-  throw lastError!;
+  throw lastError;
 }

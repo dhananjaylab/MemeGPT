@@ -153,7 +153,7 @@ class MemeTemplate(Base):
     box_count: Optional[int] = Column(Integer, nullable=True)
     last_synced_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
 
-    # Gen-Z metadata
+    # Gen-Z metadata  ← NEW
     gen_z_ready: bool = Column(Boolean, default=False, index=True)
     vibe_tags: Optional[List[str]] = Column(JSON, nullable=True)
 

@@ -1,9 +1,13 @@
-from typing import Dict, Any, Optional
+import asyncio
+import json
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from services.worker import get_job_status, get_queue_stats, cleanup_old_jobs
 from services.auth import get_current_user_optional
+from services.rate_limit import get_redis
 from models.models import User
 
 router = APIRouter()
@@ -33,7 +37,7 @@ async def get_job(
     job_id: str,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Get job status and results"""
+    """Get job status and results (Polling fallback)"""
     
     job_data = await get_job_status(job_id)
     
@@ -41,6 +45,49 @@ async def get_job(
         raise HTTPException(status_code=404, detail="Job not found")
     
     return JobStatusResponse(**job_data)
+
+
+@router.get("/{job_id}/stream")
+async def stream_job_status(
+    job_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Stream job status updates via Server-Sent Events (SSE)"""
+    
+    async def event_generator():
+        redis = await get_redis()
+        pubsub = redis.pubsub()
+        channel = f"job_status:{job_id}"
+        await pubsub.subscribe(channel)
+        
+        try:
+            # First, send current status immediately
+            current_status = await get_job_status(job_id)
+            if current_status:
+                yield f"data: {json.dumps(current_status)}\n\n"
+                if current_status["status"] in ["completed", "failed"]:
+                    return
+
+            # Then wait for updates
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    data = json.loads(message["data"])
+                    
+                    # If completed, fetch full job data (including memes)
+                    if data["status"] == "completed":
+                        full_data = await get_job_status(job_id)
+                        yield f"data: {json.dumps(full_data)}\n\n"
+                        break
+                    else:
+                        yield f"data: {json.dumps(data)}\n\n"
+                        
+                    if data["status"] == "failed":
+                        break
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.close()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/queue/stats", response_model=QueueStatsResponse)
