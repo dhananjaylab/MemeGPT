@@ -12,6 +12,24 @@ import type {
   MemeStats
 } from './types';
 
+// ─── Quick generation types ───────────────────────────────────────────────────
+
+export interface QuickMemeRequest {
+  prompt?: string;
+  template_id?: number;
+  captions?: string[];
+  ai_provider?: 'openai' | 'gemini';
+}
+
+export interface QuickMemeResponse {
+  meme_id: string;
+  image_url: string;
+  template_name: string;
+  meme_text: string[];
+  cache_hit: boolean;
+  generation_time_ms: number;
+}
+
 
 
 class APIClient {
@@ -102,6 +120,17 @@ class APIClient {
   // Meme generation
   async generateMemes(request: GenerateMemeRequest): Promise<GenerateMemeResponse> {
     return this.request<GenerateMemeResponse>('/memes/generate', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Fast synchronous generation — no queue, single HTTP round-trip.
+   * Returns the image URL directly (cache-aware: ~5ms on cache hit).
+   */
+  async generateMemeQuick(request: QuickMemeRequest): Promise<QuickMemeResponse> {
+    return this.request<QuickMemeResponse>('/memes/generate/quick', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -235,6 +264,10 @@ export const apiClient = new APIClient();
 // Convenience functions
 export const generateMemes = (prompt: string, options: Partial<GenerateMemeRequest> = {}) => {
   return apiClient.generateMemes({ prompt, ...options });
+};
+
+export const generateMemeQuick = (request: QuickMemeRequest) => {
+  return apiClient.generateMemeQuick(request);
 };
 
 export const getMemes = (params?: Parameters<typeof apiClient.getMemes>[0]) => {

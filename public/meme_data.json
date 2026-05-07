@@ -13,102 +13,83 @@
       [620, 20, 560, 560],
       [620, 620, 560, 560]
     ],
-    "example_output": ["Monday mornings", "Friday afternoons"]
+    "example_output": ["Doing homework", "Doomscrolling TikTok for 4 hours"]
   },
   {
     "id": 1,
     "name": "Distracted Boyfriend",
-    "alternative_names": [
-      "guy checking out another girl",
-      "jealous girlfriend",
-      "wandering eyes"
-    ],
+    "alternative_names": ["guy checking out another girl", "jealous girlfriend", "wandering eyes"],
     "file_path": "Distracted-Boyfriend.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Distracted Boyfriend Meme is used to humorously illustrate situations where an individual is enticed by something new while neglecting their current situation or commitment. It features a stock photo where a man looks at another woman passing by, despite being with his girlfriend. Text or images can be added to label each figure to portray different scenarios or choices. Make sure that the first sentence has the seductive thing in it, the second sentence has the person/group being seduced (e.g. 'Me' or 'Microsoft'), and the third sentence has the current commitment.",
+    "usage_instructions": "The Distracted Boyfriend Meme is used to humorously illustrate situations where an individual is enticed by something new while neglecting their current situation or commitment. Make sure that the first sentence has the seductive thing in it, the second sentence has the person/group being seduced (e.g. 'Me' or 'Microsoft'), and the third sentence has the current commitment.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
       [150, 500, 400, 250],
       [645, 330, 200, 200],
       [890, 400, 260, 260]
     ],
-    "example_output": ["New shiny idea", "Me", "Current project deadline"]
+    "example_output": ["New side quest", "Me", "Main story quest"]
   },
   {
     "id": 2,
     "name": "Left Exit 12 Off Ramp",
-    "alternative_names": [
-      "car drifts off highway",
-      "car drift meme",
-      "freeway exit"
-    ],
+    "alternative_names": ["car drifts off highway", "car drift meme", "freeway exit"],
     "file_path": "Left-Exit-12-Off-Ramp.jpg",
     "font_path": "ARIAL.TTF",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Left Exit 12 Off Ramp meme is used to humorously illustrate a sudden change in choice or direction, often reflecting impulsive or irrational decisions. It usually features an image of a car veering sharply off a main road towards an unexpected exit. Users overlay text on the road signs and the car to depict a decision-making scenario, where the main road represents an expected or conventional choice, while the exit represents a tempting distraction or alternative. The first sentence should be the main road, the second is the person/group represented by the car (e.g. 'Me' or 'All kids under 5'), and the third sentence should be the chosen tempting distraction road.",
+    "usage_instructions": "The Left Exit 12 Off Ramp meme is used to humorously illustrate a sudden change in choice or direction, often reflecting impulsive or irrational decisions. The first sentence should be the main road (expected choice), the second is the person/group represented by the car, and the third sentence should be the chosen tempting distraction road.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
       [185, 90, 130, 175],
       [300, 530, 220, 100],
       [400, 90, 190, 180]
     ],
-    "example_output": ["Staying home and studying", "Me", "Going out with friends"]
+    "example_output": ["Going to sleep at 10pm", "Me", "3AM YouTube rabbit hole"]
   },
   {
     "id": 3,
     "name": "UNO Draw 25 Cards",
-    "alternative_names": [
-      "do something you don't like or draw 25 cards",
-      "uno or draw 25",
-      "draw 25 meme"
-    ],
+    "alternative_names": ["do something you don't like or draw 25 cards", "uno or draw 25", "draw 25 meme"],
     "file_path": "UNO-Draw-25-Cards.jpg",
     "font_path": "ComicSansMS3.ttf",
     "text_color": "black",
     "text_stroke": false,
-    "usage_instructions": "The UNO Draw 25 Cards meme is used to humorously depict a situation where someone is faced with an undesirable task or decision, and comically choosing an impossible or excessive alternative instead. The format features two panels: the first presents an unwanted task or choice, while the second panel shows a hand drawing 25 cards in a game of UNO, implying the choice of the latter option over the undesirable task. The first panel shows the unwanted task or choice, while the second panel has the name of the person or thing that does not want the task or choice. The first sentence here must refer to the undesirable or unacceptable task, and the second sentence must refer to the person or thing that does not want the task or choice (e.g. 'Me', 'Italians', 'Young people').",
+    "usage_instructions": "The UNO Draw 25 Cards meme is used to humorously depict a situation where someone is faced with an undesirable task or decision, and comically choosing an impossible or excessive alternative instead. The first sentence must refer to the undesirable or unacceptable task, and the second sentence must refer to the person or thing that does not want the task or choice.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [75, 135, 161, 112],
       [285, 5, 183, 59]
     ],
-    "example_output": ["Admit pineapple can go on pizza", "Italians"]
+    "example_output": ["Reply to that email", "Me"]
   },
   {
     "id": 4,
     "name": "One Does Not Simply",
-    "alternative_names": [
-      "one does not simply walk into Mordor",
-      "lord of the rings Boromir",
-      "one does not simply blank"
-    ],
+    "alternative_names": ["one does not simply walk into Mordor", "lord of the rings Boromir", "one does not simply blank"],
     "file_path": "One-Does-Not-Simply.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The 'One Does Not Simply' meme is used to humorously highlight the difficulty or improbability of a task or situation. It features a still image of Boromir from the Lord of the Rings, with the caption 'One does not simply...' followed by the action or task being described. Users customize the second part of the caption to fit their specific humorous or sarcastic message. The first sentence must always be 'One does not simply,' and the second sentence has the difficult or improbable task.",
+    "usage_instructions": "The 'One Does Not Simply' meme is used to humorously highlight the difficulty or improbability of a task or situation. The first sentence must always be 'One does not simply,' and the second sentence has the difficult or improbable task.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [21, 6, 528, 50],
       [21, 235, 528, 100]
     ],
-    "example_output": [
-      "One does not simply",
-      "finish a Netflix series without binge-watching."
-    ]
+    "example_output": ["One does not simply", "open YouTube and watch just one video"]
   },
   {
     "id": 5,
     "name": "Expanding Brain",
-    "alternative_names": ["levels of intelligence", "expanding mind", "500 iq"],
+    "alternative_names": ["levels of intelligence", "expanding mind", "500 iq", "big brain"],
     "file_path": "Expanding-Brain.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Expanding Brain meme is used to humorously depict different levels of intelligence or thought processes. It consists of a series of images showing progressively expanding and glowing brains to represent increasingly sophisticated or complex ways of thinking about a subject. Users overlay text on each brain level to show the progression of thought or intelligence. The output are 4 separate sentences which represent increasing levels of intelligence for dealing with a situation.",
+    "usage_instructions": "The Expanding Brain meme depicts different levels of intelligence or thought processes. The output are 4 separate sentences which represent increasing levels of intelligence for dealing with a situation — from basic to galaxy-brained.",
     "number_of_text_fields": 4,
     "text_coordinates_xy_wh": [
       [15, 20, 390, 264],
@@ -117,108 +98,407 @@
       [15, 910, 390, 275]
     ],
     "example_output": [
-      "Trying to fix the problem by restarting",
-      "Turning it off and on again",
-      "Googling the error message",
-      "Reading the manual cover to cover"
+      "Set 1 alarm",
+      "Set 3 alarms 5 mins apart",
+      "Put phone across the room",
+      "Never sleep so you're never late"
     ]
   },
   {
     "id": 6,
     "name": "Hide the Pain Harold",
-    "alternative_names": ["sad life harold", "maurice", "herold"],
+    "alternative_names": ["sad life harold", "maurice", "herold", "harold hiding pain"],
     "file_path": "Hide-the-Pain-Harold.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Hide the Pain Harold meme is used to depict someone hiding their discomfort or inner turmoil behind a forced smile. The image features an elderly man, known as Harold, smiling despite a look of hidden suffering in his eyes. It's often used online to humorously express situations where one appears cheerful or calm outwardly but is actually experiencing discomfort or dissatisfaction internally. The first sentence should be the situation that is outwardly happy (e.g. 'I ate all the chocolate'), and the second sentence should be the true feelings or situation (e.g. 'Realized I have nothing for desert').",
+    "usage_instructions": "The Hide the Pain Harold meme depicts someone hiding their discomfort behind a forced smile. The first sentence should be the situation that is outwardly happy, and the second sentence should be the true feelings or situation.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [12, 225, 455, 77],
       [12, 515, 455, 77]
     ],
-    "example_output": ["Everything is fine", "Realizing it's only Monday"]
+    "example_output": ["Saying 'I'm fine' to every wellness check", "Internal screaming since 2020"]
   },
   {
     "id": 7,
     "name": "Success Kid",
-    "alternative_names": ["Motivation Baby", "Motivation Kid", "Success Baby"],
+    "alternative_names": ["Motivation Baby", "Motivation Kid", "Success Baby", "fist pump baby"],
     "file_path": "Success-Kid.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Success Kid meme is used to convey a sense of triumph or victory, often in a humorous or endearing way. It features a toddler with a clenched fist and determined expression, typically accompanied by text describing personal successes or fortunate events. Users add captions to highlight small achievements or lucky outcomes, usually starting with a setup in the top text and a victorious realization in the bottom text. The whole idea is described in two sentences, where the first sentence is the setup and the second sentence is the victorious realization.",
+    "usage_instructions": "The Success Kid meme conveys triumph or victory. The first sentence is the setup and the second sentence is the victorious realization.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [15, 15, 470, 90],
       [15, 395, 470, 90]
     ],
-    "example_output": ["Forgot to study for the exam.", "Exam got postponed!"]
+    "example_output": ["Submitted assignment at 11:59 PM", "Due at midnight. We ate."]
   },
   {
     "id": 8,
     "name": "But That's None Of My Business",
-    "alternative_names": [
-      "kermit drinking lipton iced tea",
-      "kermit lipton",
-      "kermit drinking tea"
-    ],
+    "alternative_names": ["kermit drinking lipton iced tea", "kermit lipton", "kermit drinking tea"],
     "file_path": "But-Thats-None-Of-My-Business.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The 'But That's None Of My Business' meme features Kermit the Frog sipping tea, typically used to highlight a controversial observation or hypocrisy without directly involving oneself in the situation. It's often accompanied by a statement pointing out the issue, followed by the phrase 'but that's none of my business,' implying that the speaker is merely an observer who isn't taking any sides. The first sentence should be the controversial observation or hypocrisy, and the second sentence is always the exact phrase 'but that's none of my business.'",
+    "usage_instructions": "The 'But That's None Of My Business' meme features Kermit the Frog sipping tea. The first sentence should be the controversial observation or hypocrisy, and the second sentence is always the exact phrase 'but that's none of my business.'",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [15, 10, 570, 120],
       [15, 485, 570, 100]
     ],
     "example_output": [
-      "People who always complain about being tired never go to bed early.",
+      "People posting gym selfies after their first workout",
       "But that's none of my business."
     ]
   },
   {
     "id": 9,
     "name": "Disaster Girl",
-    "alternative_names": [
-      "evil girl fire",
-      "girl house on fire",
-      "arson girl"
-    ],
+    "alternative_names": ["evil girl fire", "girl house on fire", "arson girl"],
     "file_path": "Disaster-Girl.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Disaster Girl meme is used to convey a sense of mischievous satisfaction or humor at being potentially responsible for a disastrous situation. It features a young girl with a sly smile in the foreground, while a house burns in the background. Users overlay text or images to humorously suggest that something catastrophic happened, possibly due to their actions. The first sentence should be the situation that appears disastrous (e.g. 'When your friend pulls a prank'), and the second sentence should reveal the true cause or intention (e.g. 'But you're the mastermind behind it').",
+    "usage_instructions": "The Disaster Girl meme conveys mischievous satisfaction at being responsible for a disastrous situation. The first sentence should be the disaster situation and the second should reveal the true cause or intention.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [10, 10, 480, 75],
       [10, 240, 280, 125]
     ],
     "example_output": [
-      "When your friend pulls a prank",
-      "But you're the mastermind behind it."
+      "The entire economy right now",
+      "Me buying a $7 oat milk latte"
     ]
   },
   {
     "id": 10,
     "name": "Roll Safe Think About It",
-    "alternative_names": [
-      "guy tapping head",
-      "whimsical guy",
-      "terrible genius advice"
-    ],
+    "alternative_names": ["guy tapping head", "whimsical guy", "terrible genius advice"],
     "file_path": "Roll-Safe-Think-About-It.jpg",
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "usage_instructions": "The Roll Safe Think About It meme is used to convey a humorous piece of advice or clever thinking. It features a man tapping his temple, suggesting he has come up with a smart, albeit sometimes sarcastic or flawed, solution. Users often insert text above or below the image to highlight situations where one finds a loophole or an unexpected solution. In this one both of the sentences combine to form a single piece of ridiculous/clever advice, where the first sentence often acts as the desired result (e.g. 'Nobody can beat you at chess') and the second sentence will have the ridiculous advice to achieve this (e.g. 'If you never play').",
+    "usage_instructions": "The Roll Safe Think About It meme conveys humorous clever thinking. Both sentences combine to form ridiculous/clever advice. The first sentence is the desired result and the second sentence is the ridiculous advice to achieve it.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
       [10, 10, 683, 70],
       [10, 314, 683, 70]
     ],
-    "example_output": ["No one can call you late", "If you never show up."]
+    "example_output": [
+      "Can't be judged for what you post",
+      "If you're terminally offline"
+    ]
+  },
+  {
+    "id": 11,
+    "name": "This Is Fine",
+    "alternative_names": ["dog on fire", "everything is fine dog", "this is fine dog meme"],
+    "file_path": "This-Is-Fine.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/26jxvz.jpg",
+    "usage_instructions": "The 'This Is Fine' meme features a dog sitting calmly while surrounded by fire, sipping coffee. It is used to depict situations where someone is in denial about a clearly disastrous situation. The first sentence describes the chaotic or terrible situation in the background, and the second sentence is always the phrase 'This is fine.' or a variation.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 500, 80],
+      [10, 340, 500, 80]
+    ],
+    "example_output": [
+      "My to-do list has 47 items and I've done 2",
+      "This is fine."
+    ]
+  },
+  {
+    "id": 12,
+    "name": "Surprised Pikachu",
+    "alternative_names": ["shocked pikachu", "pikachu surprised face", "pikachu face"],
+    "file_path": "Surprised-Pikachu.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/3oevdk.jpg",
+    "usage_instructions": "The Surprised Pikachu meme features Pikachu with a shocked open-mouth expression. It is used for situations where an obvious consequence of an action surprises someone. The first sentence describes a predictable action or behavior, and the second sentence describes the shockingly obvious consequence — implying the surprise was unwarranted.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 600, 100],
+      [10, 430, 600, 100]
+    ],
+    "example_output": [
+      "Texts 10 people 'we should hang out' but never follows up",
+      "Has zero plans this weekend"
+    ]
+  },
+  {
+    "id": 13,
+    "name": "Woman Yelling At Cat",
+    "alternative_names": ["smudge cat meme", "cat at dinner table", "woman pointing cat"],
+    "file_path": "Woman-Yelling-At-Cat.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/345v97.jpg",
+    "usage_instructions": "The Woman Yelling at Cat meme features an angry woman at a dinner table on the left and a confused/smug white cat on the right. It depicts arguments, contradictions, or two opposing viewpoints. The first sentence is what the person/group on the left (the yeller) is upset about, and the second sentence is the calm, sarcastic, or logical rebuttal from the right (the cat).",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 370, 460],
+      [390, 80, 360, 400]
+    ],
+    "example_output": [
+      "YOU NEED TO REPLY FASTER",
+      "read 3 days ago"
+    ]
+  },
+  {
+    "id": 14,
+    "name": "Two Buttons",
+    "alternative_names": ["sweating guy two buttons", "two choices meme", "person sweating pressing button"],
+    "file_path": "Two-Buttons.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/1g8in9.jpg",
+    "usage_instructions": "The Two Buttons meme features a panicking person struggling to choose between two buttons. It represents situations of difficult or comically trivial choices. The first two sentences label each of the two buttons (both options are usually bad, ironic, or equally tempting), and the third sentence identifies who is sweating — typically 'Me' or a group.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [20, 20, 200, 80],
+      [270, 20, 200, 80],
+      [100, 200, 280, 80]
+    ],
+    "example_output": [
+      "Reply to important email",
+      "Pretend I never saw it",
+      "Me, sweating"
+    ]
+  },
+  {
+    "id": 15,
+    "name": "Always Has Been",
+    "alternative_names": ["astronaut gun meme", "always has been astronaut", "wait it's all meme"],
+    "file_path": "Always-Has-Been.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/46e43q.jpg",
+    "usage_instructions": "The Always Has Been meme features two astronauts in space — one pointing a gun at the other. The first astronaut says 'Wait, it's all [X]?' with a shocked realization, and the second astronaut says 'Always has been.' while pointing a gun. Great for revealing that something was always obvious but people just noticed. Format: first sentence is the shocked realization starting with 'Wait, it's all', second sentence is always 'Always has been.'",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 20, 400, 120],
+      [500, 380, 400, 120]
+    ],
+    "example_output": [
+      "Wait, it's all just vibes?",
+      "Always has been."
+    ]
+  },
+  {
+    "id": 16,
+    "name": "Gru's Plan",
+    "alternative_names": ["gru plan meme", "despicable me plan", "gru whiteboard meme", "4 panel plan meme"],
+    "file_path": "Grus-Plan.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/26am.jpg",
+    "usage_instructions": "The Gru's Plan meme features Gru from Despicable Me reading a 4-step plan. Steps 1, 2, and 3 are logical, but step 4 repeats step 3 as if Gru didn't realize it contradicts his plan. Use this to show plans that fall apart at the end. Provide 4 sentences: the first two are the setup/plan steps, the third is the unexpected or ironic result, and the fourth REPEATS the third sentence exactly.",
+    "number_of_text_fields": 4,
+    "text_coordinates_xy_wh": [
+      [460, 50, 460, 200],
+      [460, 290, 460, 200],
+      [460, 545, 460, 200],
+      [460, 800, 460, 200]
+    ],
+    "example_output": [
+      "Start going to the gym",
+      "Get fit and healthy",
+      "Spend the whole time on my phone",
+      "Spend the whole time on my phone"
+    ]
+  },
+  {
+    "id": 17,
+    "name": "Panik Kalm Panik",
+    "alternative_names": ["panik calm panik meme", "panic calm panic astronaut", "escalating panic meme"],
+    "file_path": "Panik-Kalm-Panik.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/3qqcml.jpg",
+    "usage_instructions": "The Panik Kalm Panik meme shows three panels: PANIK (panic), KALM (calm), and PANIK (panic again). The first sentence is the initial scary situation causing panic. The second sentence is the reassuring thought that causes calm. The third sentence is the worse realization that brings back even bigger panic. Great for escalating anxiety moments.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [10, 20, 380, 160],
+      [10, 380, 380, 160],
+      [10, 740, 380, 160]
+    ],
+    "example_output": [
+      "Exam is in 2 weeks",
+      "Wait I have all that time to study",
+      "Exam is in 2 weeks"
+    ]
+  },
+  {
+    "id": 18,
+    "name": "Nobody Absolutely Nobody",
+    "alternative_names": ["nobody meme", "absolutely nobody meme", "nobody asked but", "unsolicited meme"],
+    "file_path": "Nobody-Absolutely-Nobody.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/3bb4c7.jpg",
+    "usage_instructions": "The Nobody / Absolutely Nobody meme format is used for behaviors that are completely unprompted and random. The first line is always 'Nobody:' and the second is 'Absolutely nobody:' and the third describes the absurd, unsolicited, or extra thing someone or something does. It mocks unnecessary or over-the-top behavior. Keep the third sentence punchy and relatable.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [10, 10, 600, 80],
+      [10, 110, 600, 80],
+      [10, 240, 600, 180]
+    ],
+    "example_output": [
+      "Nobody:",
+      "Absolutely nobody:",
+      "My brain at 3AM: let's revisit every embarrassing thing you've ever done"
+    ]
+  },
+  {
+    "id": 19,
+    "name": "Me Explaining To My Mom",
+    "alternative_names": ["explaining to mom meme", "me explaining meme", "kid explaining to parent"],
+    "file_path": "Me-Explaining-To-Mom.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/1o00in.jpg",
+    "usage_instructions": "The Me Explaining to My Mom meme features someone enthusiastically explaining something while a parent looks unimpressed or confused. The first sentence is the thing being explained (usually complex, niche, or internet-related), and the second sentence is the parent's confused, dismissive, or concerned response. Great for generational communication gaps and niche interests.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 490, 200],
+      [510, 10, 490, 200]
+    ],
+    "example_output": [
+      "Me explaining why I'm a sigma NPC in my own lore arc",
+      "My mom: Are you okay? Do you need water?"
+    ]
+  },
+  {
+    "id": 20,
+    "name": "It's A Trap",
+    "alternative_names": ["admiral ackbar trap", "star wars trap meme", "its a trap"],
+    "file_path": "Its-A-Trap.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/1jgig.jpg",
+    "usage_instructions": "The It's A Trap meme features Admiral Ackbar from Star Wars saying 'It's a trap!' Used to warn about situations that appear appealing but are obviously or humorously dangerous, manipulative, or problematic. The first sentence describes the tempting situation, and the second sentence is always 'It's a trap!' or a creative variation.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 580, 160],
+      [10, 350, 580, 140]
+    ],
+    "example_output": [
+      "'Just one more episode' at 2AM",
+      "IT'S A TRAP!"
+    ]
+  },
+  {
+    "id": 21,
+    "name": "Mocking SpongeBob",
+    "alternative_names": ["mocking spongebob", "alternating caps spongebob", "chicken spongebob"],
+    "file_path": "Mocking-SpongeBob.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/1otk96.jpg",
+    "usage_instructions": "The Mocking SpongeBob meme features SpongeBob mimicking something in a mocking way — often shown with alternating uppercase and lowercase letters to indicate sarcasm. The first sentence is the normal, sincere version of what someone says. The second sentence repeats it in a mocking, sarcastic way (often with weird capitalization like 'i cAn'T HaNdLe aDuLtInG'). Use this to mock clichés, overused phrases, or hypocritical statements.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 800, 120],
+      [10, 460, 800, 120]
+    ],
+    "example_output": [
+      "I'm going to start being productive",
+      "i'M gOiNg To StArT bEiNg PrOdUcTiVe"
+    ]
+  },
+  {
+    "id": 22,
+    "name": "Bike Fall",
+    "alternative_names": ["guy falling off bike", "stick in bike wheel", "bicycle spoke meme"],
+    "file_path": "Bike-Fall.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/9ehk.jpg",
+    "usage_instructions": "The Bike Fall meme features a person sticking something into the spokes of their own bicycle wheel, causing them to crash. It represents self-sabotage or situations where someone causes their own downfall. The first sentence is the person on the bike (who is doing fine). The second sentence is the stick/sabotage being inserted. The third sentence is what falls or suffers as a result.",
+    "number_of_text_fields": 3,
+    "text_coordinates_xy_wh": [
+      [320, 20, 300, 100],
+      [10, 280, 280, 160],
+      [350, 450, 300, 100]
+    ],
+    "example_output": [
+      "Me, having a productive morning",
+      "Opening Twitter 'just for a minute'",
+      "My entire day"
+    ]
+  },
+  {
+    "id": 23,
+    "name": "Change My Mind",
+    "alternative_names": ["steven crowder change my mind", "change my mind table", "unpopular opinion table"],
+    "file_path": "Change-My-Mind.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/24y43o.jpg",
+    "usage_instructions": "The Change My Mind meme features Steven Crowder sitting at a table with a sign. Use it for bold, controversial, or hilariously trivial opinions that the speaker is willing to defend. The first sentence should be the hot take or bold opinion written on the sign. Keep it punchy, confident, and slightly outrageous. One sentence only.",
+    "number_of_text_fields": 1,
+    "text_coordinates_xy_wh": [
+      [320, 260, 450, 200]
+    ],
+    "example_output": ["Brunch is just breakfast for people who missed breakfast. Change my mind."]
+  },
+  {
+    "id": 24,
+    "name": "Ancient Aliens Guy",
+    "alternative_names": ["aliens meme", "ancient aliens", "giorgio tsoukalos aliens", "ancient aliens hair guy"],
+    "file_path": "Ancient-Aliens.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/kx0jh.jpg",
+    "usage_instructions": "The Ancient Aliens meme features Giorgio Tsoukalos from the TV show Ancient Aliens, used to humorously attribute anything confusing or mysterious to aliens or conspiracy. The first sentence poses a question or describes something mysterious/confusing. The second sentence delivers the absurd 'aliens' explanation. Use for anything unexplained, irrational, or that defies logic in a funny way.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 680, 100],
+      [10, 310, 680, 100]
+    ],
+    "example_output": [
+      "Can't explain why I feel sad for no reason?",
+      "Aliens."
+    ]
+  },
+  {
+    "id": 25,
+    "name": "Coffin Dance",
+    "alternative_names": ["ghana coffin pallbearers", "dancing pallbearers meme", "coffin dance meme", "astronomia meme"],
+    "file_path": "Coffin-Dance.jpg",
+    "font_path": "impact.ttf",
+    "text_color": "white",
+    "text_stroke": true,
+    "fallback_url": "https://i.imgflip.com/6gg7y9.jpg",
+    "usage_instructions": "The Coffin Dance meme features the famous Ghanaian dancing pallbearers who carry coffins with enthusiastic dancing. It is used to represent anything that gets 'buried' — failure, a plan gone wrong, hopes, etc. The first sentence describes the person or thing being metaphorically 'carried to their grave', and the second sentence describes the absurd or trivial cause of their downfall.",
+    "number_of_text_fields": 2,
+    "text_coordinates_xy_wh": [
+      [10, 10, 700, 120],
+      [10, 420, 700, 120]
+    ],
+    "example_output": [
+      "My will to be productive",
+      "After finding a new Netflix series"
+    ]
   }
 ]
