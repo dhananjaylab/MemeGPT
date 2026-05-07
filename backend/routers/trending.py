@@ -8,6 +8,9 @@ from db.session import get_db
 from models.models import GeneratedMeme
 from routers.memes import MemeResponse
 
+import json
+from services.rate_limit import get_redis
+
 router = APIRouter()
 
 # Mock trending topics data for MVP (can be replaced with real data from Reddit/Twitter API)
@@ -30,14 +33,27 @@ async def get_trending_topics(
 ):
     """Get trending topics for meme generation inspiration"""
     
+    redis = await get_redis()
+    cache_key = f"trending:topics:{limit}"
+    
+    # Try to get from cache
+    cached_data = await redis.get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
+    
     # For MVP, return mock data
     # In production, this could integrate with Reddit/Twitter API
-    return {
+    response_data = {
         "topics": MOCK_TRENDING_TOPICS[:limit],
         "source": "mock",
         "updated_at": datetime.utcnow().isoformat(),
         "refresh_interval_seconds": 3600
     }
+    
+    # Cache for 1 hour
+    await redis.setex(cache_key, 3600, json.dumps(response_data))
+    
+    return response_data
 
 
 @router.get("/topics/real")

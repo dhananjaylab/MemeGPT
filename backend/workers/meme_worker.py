@@ -20,6 +20,8 @@ from services.storage import upload_to_r2
 
 from services.worker import get_arq_pool, close_arq_pool
 
+from services.rate_limit import get_redis
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ async def update_job_status(
     result_meme_ids: Optional[list] = None, 
     error_message: Optional[str] = None
 ) -> bool:
-    """Update job status in database"""
+    """Update job status in database and notify subscribers via Redis Pub/Sub"""
     try:
         async with db_session.AsyncSessionLocal() as db:
             update_data = {
@@ -38,26 +40,86 @@ async def update_job_status(
             }
             
             if result_meme_ids is not None:
-                logger.debug(f"Updating job {job_id} with result_meme_ids: {result_meme_ids}")
                 update_data["result_meme_ids"] = result_meme_ids
             
             if error_message is not None:
-                logger.debug(f"Updating job {job_id} with error_message: {error_message}")
                 update_data["error_message"] = error_message
             
-            logger.debug(f"Executing update for job {job_id}: {update_data}")
-            result = await db.execute(
+            await db.execute(
                 update(MemeJob)
                 .where(MemeJob.id == job_id)
                 .values(**update_data)
             )
-            logger.debug(f"Update affected {result.rowcount} rows")
             await db.commit()
-            logger.info(f"Successfully updated job {job_id} to status={status}, meme_count={len(result_meme_ids) if result_meme_ids else 0}")
+            
+            # Publish status change to Redis channel
+            try:
+                redis = await get_redis()
+                message = {
+                    "job_id": job_id,
+                    "status": status,
+                    "meme_ids": result_meme_ids or [],
+                    "error": error_message
+                }
+                await redis.publish(f"job_status:{job_id}", json.dumps(message))
+            except Exception as re:
+                logger.warning(f"Failed to publish job status update to Redis: {re}")
+                
+            logger.info(f"Successfully updated job {job_id} to status={status}")
             return True
     except Exception as e:
         logger.error(f"Error updating job {job_id}: {e}", exc_info=True)
         return False
+
+async def _process_single_meme(
+    db: AsyncSession,
+    ai_meme: Dict[str, Any],
+    prompt: str,
+    user_id: Optional[str],
+    job_id: str
+) -> Optional[str]:
+    """Internal helper to process a single meme in the pipeline"""
+    try:
+        template_id = int(ai_meme["meme_id"])
+        template = await get_template_by_id(db, template_id)
+        if not template:
+            logger.warning(f"Template {template_id} not found")
+            return None
+
+        # 2. Image Composition
+        image_path = overlay_text_on_image(template, ai_meme["meme_text"])
+        
+        # 3. Storage Upload
+        object_key = f"memes/{uuid4()}.png"
+        upload_result = await upload_to_r2(image_path, object_key)
+        
+        # Extract URL from result
+        if upload_result and isinstance(upload_result, dict):
+            image_url = upload_result.get('primary', None)
+        else:
+            image_url = None
+        
+        if not image_url:
+            logger.error(f"Failed to upload or save meme for job {job_id}")
+            return None
+
+        # 4. Save to DB record (returns ID for collective commit)
+        meme_id = str(uuid4())
+        new_meme = GeneratedMeme(
+            id=meme_id,
+            user_id=user_id,
+            prompt=prompt,
+            template_name=template["name"],
+            template_id=template_id,
+            meme_text=ai_meme["meme_text"],
+            image_url=image_url,
+            is_public=True
+        )
+        db.add(new_meme)
+        return meme_id
+    except Exception as e:
+        logger.error(f"Error in single meme processing for job {job_id}: {e}")
+        return None
 
 async def get_template_by_id(db: AsyncSession, template_id: int) -> Optional[Dict[str, Any]]:
     """Get meme template from DB"""
@@ -86,27 +148,17 @@ async def process_meme_generation(
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Full pipeline: AI -> Compositor -> Storage -> DB"""
-    logger.info(f"Processing job {job_id} with provider={ai_provider}, mode={generation_mode}")
+    """Full pipeline: AI -> Compositor -> Storage -> DB (Parallelized)"""
+    logger.info(f"Processing job {job_id} in parallel mode")
     await update_job_status(job_id, "processing")
     
     try:
         # 1. Caption generation
         if generation_mode.lower() == "manual":
             if manual_template_id is None or not manual_captions:
-                await update_job_status(
-                    job_id,
-                    "failed",
-                    error_message="Manual mode requires template_id and captions",
-                )
+                await update_job_status(job_id, "failed", error_message="Manual mode needs template and captions")
                 return {"status": "failed"}
-            captions = [
-                {
-                    "meme_id": int(manual_template_id),
-                    "meme_name": "manual",
-                    "meme_text": manual_captions,
-                }
-            ]
+            captions = [{"meme_id": int(manual_template_id), "meme_text": manual_captions}]
         else:
             provider = ai_provider.lower()
             if provider not in {AIProvider.OPENAI.value, AIProvider.GEMINI.value}:
@@ -115,68 +167,35 @@ async def process_meme_generation(
             captions = await generator(prompt)
         
         if not captions:
-            await update_job_status(job_id, "failed", error_message=f"AI ({ai_provider}) failed to generate captions")
+            await update_job_status(job_id, "failed", error_message="AI failed to generate captions")
             return {"status": "failed"}
 
-        meme_ids = []
         async with db_session.AsyncSessionLocal() as db:
-            for ai_meme in captions:
-                try:
-                    template_id = int(ai_meme["meme_id"])
-                    template = await get_template_by_id(db, template_id)
-                    if not template:
-                        logger.warning(f"Template {template_id} not found")
-                        continue
+            # Run meme processing tasks in parallel
+            tasks = [
+                _process_single_meme(db, cap, prompt, user_id, job_id) 
+                for cap in captions
+            ]
+            
+            # Execute all tasks concurrently
+            results = await asyncio.gather(*tasks)
+            
+            # Filter out failed ones
+            meme_ids = [m_id for m_id in results if m_id is not None]
+            
+            if meme_ids:
+                await db.commit()
+                logger.info(f"Successfully committed {len(meme_ids)} memes for job {job_id}")
+            else:
+                logger.error(f"No memes could be processed for job {job_id}")
+                await update_job_status(job_id, "failed", error_message="Failed to generate/process images")
+                return {"status": "failed"}
 
-                    # 2. Image Composition
-                    image_path = overlay_text_on_image(template, ai_meme["meme_text"])
-                    
-                    # 3. Storage Upload
-                    object_key = f"memes/{uuid4()}.png"
-                    upload_result = await upload_to_r2(image_path, object_key)
-                    
-                    # Extract URL from result (supports both R2 and local fallback)
-                    if upload_result and isinstance(upload_result, dict):
-                        image_url = upload_result.get('primary', None)
-                    else:
-                        image_url = None
-                    
-                    if not image_url:
-                        logger.error(f"Failed to upload or save meme for job {job_id}")
-                        continue
-
-                    # 4. Save to DB
-                    meme_id = str(uuid4())
-                    new_meme = GeneratedMeme(
-                        id=meme_id,
-                        user_id=user_id,
-                        prompt=prompt,
-                        template_name=template["name"],
-                        template_id=template_id,
-                        meme_text=ai_meme["meme_text"],
-                        image_url=image_url,
-                        is_public=True
-                    )
-                    db.add(new_meme)
-                    meme_ids.append(meme_id)
-                    logger.debug(f"Added meme {meme_id} to session for job {job_id}")
-                except Exception as e:
-                    logger.error(f"Error in single meme processing: {e}", exc_info=True)
-            logger.info(f"Committing {len(meme_ids)} memes to database for job {job_id}")
-            await db.commit()
-            logger.info(f"Successfully committed {len(meme_ids)} memes for job {job_id}")
-
-        if not meme_ids:
-            logger.warning(f"No memes generated for job {job_id}")
-            await update_job_status(job_id, "failed", error_message="Failed to generate any memes")
-            return {"status": "failed"}
-
-        logger.info(f"Job {job_id} generated {len(meme_ids)} memes: {meme_ids}")
         await update_job_status(job_id, "completed", result_meme_ids=meme_ids)
         return {"status": "completed", "meme_ids": meme_ids}
 
     except Exception as e:
-        logger.error(f"Job {job_id} failed: {e}")
+        logger.error(f"Job {job_id} pipeline error: {e}", exc_info=True)
         await update_job_status(job_id, "failed", error_message=str(e))
         return {"status": "failed"}
 
