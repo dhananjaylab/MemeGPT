@@ -159,7 +159,7 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             output = data
         elif not output and isinstance(data, dict):
             # Check for alternative keys (OpenAI uses different response formats)
-            output = data.get("memes", data.get("results", data.get("meme_options", data.get("options", []))))
+            output = data.get("memes", data.get("results", data.get("meme_options", data.get("options", data.get("examples", [])))))
         
         if not output or not isinstance(output, list):
             logger.error("OpenAI returned empty or invalid output array. Data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
@@ -175,7 +175,9 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             # Check for required fields with flexible naming (OpenAI uses different field names)
             meme_id = meme.get("meme_id") or meme.get("id") or meme.get("template_id")
             meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
-            meme_text = meme.get("meme_text") or meme.get("text") or meme.get("captions") or meme.get("text_fields") or meme.get("input_texts")
+            meme_text = (meme.get("meme_text") or meme.get("text") or meme.get("captions") or 
+                        meme.get("text_fields") or meme.get("input_texts") or 
+                        meme.get("fields") or meme.get("output"))
             
             # If we have template_name but no ID, try to look it up
             if meme_id is None and meme_name:
