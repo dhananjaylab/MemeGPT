@@ -20,6 +20,79 @@ class ImgflipService:
     """Service for interacting with Imgflip API"""
     
     @staticmethod
+    async def caption_image(
+        template_id: str,
+        texts: List[str],
+        username: Optional[str] = None,
+        password: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a meme using Imgflip's caption API.
+        
+        Args:
+            template_id: Imgflip template ID
+            texts: List of text strings for each text box
+            username: Imgflip username (required for Imgflip API)
+            password: Imgflip password (required for Imgflip API)
+            
+        Returns:
+            Dictionary with 'success' and 'data' keys containing the generated meme URL
+            
+        Raises:
+            Exception: If credentials are not provided or API call fails
+            
+        Note:
+            Imgflip API requires valid credentials. Without them, this method will raise an exception.
+            The caller should catch this and fall back to local compositor.
+            
+            To enable Imgflip API, set in .env:
+                IMGFLIP_USERNAME=your_username
+                IMGFLIP_PASSWORD=your_password
+        """
+        try:
+            # Get credentials from settings if not provided
+            username = username or settings.imgflip_username
+            password = password or settings.imgflip_password
+            
+            # Check if credentials are available
+            if not username or not password:
+                raise Exception(
+                    "Imgflip credentials not configured. "
+                    "Set IMGFLIP_USERNAME and IMGFLIP_PASSWORD in .env to use Imgflip API. "
+                    "Falling back to local compositor."
+                )
+            
+            # Prepare form data
+            form_data = {
+                "template_id": template_id,
+                "username": username,
+                "password": password,
+            }
+            
+            # Add text boxes (Imgflip uses text0, text1, text2, etc.)
+            for i, text in enumerate(texts):
+                form_data[f"text{i}"] = text
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    IMGFLIP_CAPTION_URL,
+                    data=form_data
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                if not data.get("success"):
+                    error_msg = data.get("error_message", "Unknown error")
+                    raise Exception(f"Imgflip caption API failed: {error_msg}")
+                
+                return data
+                
+        except httpx.HTTPError as e:
+            raise Exception(f"Failed to caption Imgflip template: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Error captioning Imgflip template: {str(e)}")
+    
+    @staticmethod
     async def fetch_popular_templates() -> List[Dict[str, Any]]:
         """
         Fetch popular meme templates from Imgflip API.
@@ -112,9 +185,15 @@ class ImgflipService:
                     url = template_data.get("url", "")
                     box_count = template_data.get("box_count", 2)
                     
-                    # Check if template already exists
+                    # Check if template already exists (by ID or name)
+                    from sqlalchemy import or_
                     result = await db.execute(
-                        select(MemeTemplate).where(MemeTemplate.imgflip_id == imgflip_id)
+                        select(MemeTemplate).where(
+                            or_(
+                                MemeTemplate.imgflip_id == imgflip_id,
+                                MemeTemplate.name == name
+                            )
+                        )
                     )
                     existing_template = result.scalar_one_or_none()
                     

@@ -109,13 +109,14 @@ async def _load_template_image(
                 logger.warning("Remote fetch failed (%s), trying local: %s", resolved_url[:60], exc)
 
     # ── Fallback: local file ─────────────────────────────────────────────────
-    local = IMAGE_FOLDER / file_path
-    if local.exists():
-        return Image.open(local)
+    if file_path:
+        local = IMAGE_FOLDER / file_path
+        if local.exists() and local.is_file():
+            return Image.open(local)
 
-    raise FileNotFoundError(
-        f"Template image not found: remote URL={image_url!r}, local={local}"
-    )
+    logger.error("Template image not found: remote=%r, local=%s. Using blank fallback.", image_url, file_path)
+    # Generate a blank fallback image to prevent pipeline crash
+    return Image.new("RGB", (800, 800), color=(40, 40, 40))
 
 
 # ── Core text-drawing logic ───────────────────────────────────────────────────
@@ -257,11 +258,15 @@ def overlay_text_on_image(
 
 def _overlay_local_only(meme: Dict[str, Any], texts: List[str]) -> Path:
     """Fallback compositor that only reads local files."""
-    image_path = IMAGE_FOLDER / meme["file_path"]
-    if not image_path.exists():
-        raise FileNotFoundError(f"Template image not found: {image_path}")
-
-    img = Image.open(image_path)
+    file_path = meme.get("file_path")
+    if file_path:
+        image_path = IMAGE_FOLDER / file_path
+        if image_path.exists() and image_path.is_file():
+            img = Image.open(image_path)
+        else:
+            img = Image.new("RGB", (800, 800), color=(40, 40, 40))
+    else:
+        img = Image.new("RGB", (800, 800), color=(40, 40, 40))
     draw = ImageDraw.Draw(img)
 
     for bbox, text in zip(meme["text_coordinates_xy_wh"], texts):

@@ -28,6 +28,7 @@ from services.cache import (
     get_cached_meme_url, set_cached_meme_url,
 )
 from services.compositor import overlay_text_on_image_async
+from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator, AIProvider
 from services.storage import upload_to_r2
 from services.worker import close_arq_pool, get_arq_pool
@@ -82,6 +83,7 @@ async def get_template_by_id(
         "number_of_text_fields": t.number_of_text_fields,
         "image_url": t.image_url,   # ← NEW: needed for remote templates
         "source": t.source,
+        "imgflip_id": t.imgflip_id,  # ← NEW: needed for Imgflip API
     }
 
 
@@ -164,18 +166,51 @@ async def process_meme_generation(
                         )
                         image_url = cached_url
                     else:
-                        # Compose image (supports remote templates)
-                        image_path = await overlay_text_on_image_async(template, texts)
+                        # Check if this is an Imgflip template
+                        if template.get("source") == "imgflip" and template.get("imgflip_id"):
+                            logger.info(
+                                "Using Imgflip API for template %d (imgflip_id=%s)",
+                                template_id, template["imgflip_id"]
+                            )
+                            try:
+                                # Use Imgflip caption API
+                                imgflip_result = await imgflip_service.caption_image(
+                                    template["imgflip_id"],
+                                    texts
+                                )
+                                image_url = imgflip_result.get("data", {}).get("url")
+                                if not image_url:
+                                    raise Exception("Imgflip API did not return image URL")
+                                
+                                logger.info("Imgflip API generated meme: %s", image_url[:100])
+                            except Exception as imgflip_exc:
+                                logger.error(
+                                    "Imgflip API failed for template %d: %s. Falling back to compositor.",
+                                    template_id, imgflip_exc
+                                )
+                                # Fallback to local compositor
+                                image_path = await overlay_text_on_image_async(template, texts)
+                                object_key = f"memes/{uuid4()}.png"
+                                upload_result = await upload_to_r2(image_path, object_key)
+                                image_url = (
+                                    upload_result.get("primary")
+                                    if isinstance(upload_result, dict)
+                                    else None
+                                )
+                        else:
+                            # Use local compositor for non-Imgflip templates
+                            image_path = await overlay_text_on_image_async(template, texts)
 
-                        # Upload to R2 / local fallback
-                        object_key = f"memes/{uuid4()}.png"
-                        upload_result = await upload_to_r2(image_path, object_key)
+                            # Upload to R2 / local fallback
+                            object_key = f"memes/{uuid4()}.png"
+                            upload_result = await upload_to_r2(image_path, object_key)
 
-                        image_url = (
-                            upload_result.get("primary")
-                            if isinstance(upload_result, dict)
-                            else None
-                        )
+                            image_url = (
+                                upload_result.get("primary")
+                                if isinstance(upload_result, dict)
+                                else None
+                            )
+                        
                         if not image_url:
                             logger.error("Upload failed for job %s", job_id)
                             continue

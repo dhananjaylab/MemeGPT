@@ -7,8 +7,7 @@ from db.session import get_db
 from models.models import User
 from services.auth import get_current_user_optional
 from services.meme_ai import (
-    generate_meme_captions_with_gemini, 
-    generate_meme_captions,
+    get_caption_generator,
     AIProvider
 )
 from core.config import settings
@@ -70,37 +69,27 @@ async def get_ai_suggestions(
     provider = provider.lower()
     
     # Validate provider availability
-    if provider == AIProvider.GEMINI.value:
-        if not settings.has_gemini:
-            raise HTTPException(
-                status_code=503, 
-                detail="Gemini AI provider not configured. Please set GEMINI_API_KEY."
-            )
-        generator = generate_meme_captions_with_gemini
-    elif provider == AIProvider.OPENAI.value:
-        if not settings.has_openai:
-            raise HTTPException(
-                status_code=503,
-                detail="OpenAI provider not configured. Please set OPENAI_API_KEY."
-            )
-        generator = generate_meme_captions
-    else:
-        # Default based on config
-        if settings.has_openai:
-            generator = generate_meme_captions
-            provider = AIProvider.OPENAI.value
-        elif settings.has_gemini:
-            generator = generate_meme_captions_with_gemini
-            provider = AIProvider.GEMINI.value
-        else:
-            raise HTTPException(
-                status_code=503,
-                detail="No AI provider configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
-            )
+    if provider == AIProvider.GEMINI.value and not settings.has_gemini:
+        raise HTTPException(
+            status_code=503, 
+            detail="Gemini AI provider not configured. Please set GEMINI_API_KEY."
+        )
+    elif provider == AIProvider.OPENAI.value and not settings.has_openai:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI provider not configured. Please set OPENAI_API_KEY."
+        )
+    elif not settings.has_openai and not settings.has_gemini:
+        raise HTTPException(
+            status_code=503,
+            detail="No AI provider configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
+        )
     
-    # Generate suggestions
+    # Generate suggestions using unified generator with failover
     try:
+        generator = await get_caption_generator(provider)
         suggestions = await generator(body.prompt)
+        
         if not suggestions:
             raise HTTPException(
                 status_code=500,
