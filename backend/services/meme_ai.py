@@ -73,6 +73,9 @@ CULTURAL CONTEXT — GEN-Z INTERNET HUMOR (2023-2025):
   irony, academic pressure, social anxiety, and absurd escalation
 • Short punchy captions beat long ones — aim for impact in ≤ 8 words per field
 • Self-deprecating and situational > preachy or lecture-y
+
+CRITICAL: Follow the exact text field order specified in each template's usage_instructions.
+The order matters for the meme to make sense!
 """
 
 _OUTPUT_SCHEMA_DESC = "Return a JSON object with an 'output' array containing exactly 3 meme objects."
@@ -89,11 +92,15 @@ AVAILABLE TEMPLATES:
 RULES:
 1. Pick 3 DIFFERENT templates — variety is key.
 2. Match the template structure exactly (number of text fields, tone).
-3. Keep text SHORT and punchy (max 10 words per field).
-4. Be funny, not cringe. Lean into current internet culture.
-5. The first option should be the most relatable/mainstream.
-6. The second option can be more niche/absurdist.
-7. The third option should be the wildcard / unexpected angle.
+3. **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template.
+   - For "Distracted Boyfriend": [seductive thing, person, current commitment]
+   - For "Left Exit 12": [main road, person, exit road]
+   - Read the usage_instructions carefully and follow the field order!
+4. Keep text SHORT and punchy (max 10 words per field).
+5. Be funny, not cringe. Lean into current internet culture.
+6. The first option should be the most relatable/mainstream.
+7. The second option can be more niche/absurdist.
+8. The third option should be the wildcard / unexpected angle.
 
 Provide exactly 3 meme options with proper JSON structure."""
 
@@ -107,6 +114,7 @@ Available templates: {meme_data}
 
 Rules:
 - Choose 3 different templates that best fit the user's prompt
+- **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template
 - Text must be SHORT (max 10 words per field) and punchy
 - Match the exact number of text fields per template
 - Provide exactly 3 meme options with proper structure"""
@@ -169,8 +177,20 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
             meme_text = meme.get("meme_text") or meme.get("text") or meme.get("captions") or meme.get("text_fields") or meme.get("input_texts")
             
+            # If we have template_name but no ID, try to look it up
+            if meme_id is None and meme_name:
+                try:
+                    meme_data_obj = json.loads(load_meme_data())
+                    # Try exact match first
+                    template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
+                    if template:
+                        meme_id = template["id"]
+                        logger.debug("Looked up template ID %d for name '%s'", meme_id, meme_name)
+                except Exception as e:
+                    logger.warning("Failed to look up template ID for name '%s': %s", meme_name, e)
+            
             if meme_id is None or not meme_text:
-                logger.warning("Skipping incomplete meme object: %s", meme)
+                logger.warning("Skipping incomplete meme object (missing ID or text): %s", meme)
                 continue
             
             # For OpenAI, we might need to look up the template name if not provided
@@ -279,6 +299,32 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                     raw = raw[:last_complete + 2] + ']}'
                     logger.debug("Attempted JSON fix: %s", raw[-50:])
             
+            # Try to fix missing commas between objects
+            if '"}{"' in raw:
+                logger.warning("Detected missing comma between objects, attempting to fix")
+                raw = raw.replace('"}{"', '"},{"')
+                logger.debug("Fixed missing commas")
+            
+            # Try to fix incomplete strings at the end
+            if raw.endswith('"') and not raw.endswith('"}'):
+                logger.warning("Detected incomplete string at end, attempting to fix")
+                raw = raw + '"}]}'
+                logger.debug("Added closing brackets")
+            elif not raw.endswith('}'):
+                logger.warning("Response doesn't end with closing bracket, attempting to fix")
+                # Count opening and closing brackets
+                open_braces = raw.count('{')
+                close_braces = raw.count('}')
+                open_brackets = raw.count('[')
+                close_brackets = raw.count(']')
+                
+                # Add missing closing brackets
+                if close_braces < open_braces:
+                    raw += '}' * (open_braces - close_braces)
+                if close_brackets < open_brackets:
+                    raw += ']' * (open_brackets - close_brackets)
+                logger.debug("Added missing closing brackets")
+            
             data = json.loads(raw)
             
             # Handle different response formats
@@ -303,12 +349,24 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                     continue
                 
                 # Check for required fields with flexible naming
-                meme_id = meme.get("meme_id") or meme.get("id")
-                meme_name = meme.get("meme_name") or meme.get("name")
-                meme_text = meme.get("meme_text") or meme.get("text") or meme.get("captions")
+                meme_id = meme.get("meme_id") or meme.get("id") or meme.get("template_id")
+                meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
+                meme_text = meme.get("meme_text") or meme.get("text") or meme.get("captions") or meme.get("input_texts")
+                
+                # If we have template_name but no ID, try to look it up
+                if meme_id is None and meme_name:
+                    try:
+                        meme_data_obj = json.loads(load_meme_data())
+                        # Try exact match first
+                        template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
+                        if template:
+                            meme_id = template["id"]
+                            logger.debug("Looked up template ID %d for name '%s'", meme_id, meme_name)
+                    except Exception as e:
+                        logger.warning("Failed to look up template ID for name '%s': %s", meme_name, e)
                 
                 if meme_id is None or not meme_name or not meme_text:
-                    logger.warning("Skipping incomplete meme object: %s", meme)
+                    logger.warning("Skipping incomplete meme object (missing ID, name, or text): %s", meme)
                     continue
                 
                 # Normalize the meme object
