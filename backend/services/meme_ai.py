@@ -148,26 +148,80 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
     meme_data = load_meme_data()
     try:
+        # Configure safety settings to be more permissive for meme humor
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+        ]
+
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-3-flash-preview",
             system_instruction=_build_gemini_system(meme_data),
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=2048,
                 temperature=1.0,
                 response_mime_type="application/json",
             ),
+            safety_settings=safety_settings
         )
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip()
-        # Strip accidental markdown fences
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw)
-        return data.get("output", [])
+        
+        # Use async generation
+        resp = await model.generate_content_async(prompt)
+        
+        # 1. Candidate check
+        if not resp.candidates:
+            logger.error("Gemini returned no candidates. Prompt feedback: %s", getattr(resp, 'prompt_feedback', 'N/A'))
+            return None
+
+        candidate = resp.candidates[0]
+        
+        # 2. Safety/Finish reason check
+        # finish_reason 1 is STOP (Success), others usually mean blocked or error
+        if candidate.finish_reason != 1:
+            logger.error("Gemini generation blocked/failed. Reason: %s. Safety: %s", 
+                         candidate.finish_reason, 
+                         [{"category": r.category, "rating": r.probability} for r in candidate.safety_ratings] if hasattr(candidate, 'safety_ratings') else "N/A")
+            return None
+
+        # 3. Content extraction
+        try:
+            raw = candidate.content.parts[0].text.strip()
+        except (AttributeError, IndexError) as e:
+            logger.error("Failed to extract text from Gemini candidate: %s", e)
+            return None
+        
+        # 4. Robust JSON Parsing
+        json_str = raw
+        if "```json" in raw:
+            json_str = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            json_str = raw.split("```")[1].split("```")[0].strip()
+        
+        try:
+            data = json.loads(json_str)
+            # Support both {"output": [...]} and a direct array if the model gets confused
+            if isinstance(data, dict):
+                return data.get("output", [])
+            elif isinstance(data, list):
+                return data
+            return None
+        except json.JSONDecodeError:
+            logger.error("Failed to parse Gemini JSON. Raw output: %s", raw[:500])
+            # Last resort: try regex
+            import re
+            match = re.search(r'(\{.*\}|\[.*\])', raw, re.DOTALL)
+            if match:
+                try:
+                    extracted = json.loads(match.group(1))
+                    if isinstance(extracted, dict): return extracted.get("output", [])
+                    if isinstance(extracted, list): return extracted
+                except:
+                    pass
+            return None
     except Exception as exc:
-        logger.error("Gemini caption generation failed: %s", exc)
+        logger.exception("Gemini caption generation failed: %s", exc)
         return None
 
 
