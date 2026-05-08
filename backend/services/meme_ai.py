@@ -15,7 +15,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from openai import AsyncOpenAI
 
 from core.config import settings
@@ -34,8 +35,7 @@ class AIProvider(str, Enum):
 # ── Clients ───────────────────────────────────────────────────────────────────
 openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
-if settings.gemini_api_key:
-    genai.configure(api_key=settings.gemini_api_key)
+gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 
 # ── Template data ─────────────────────────────────────────────────────────────
@@ -142,47 +142,46 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
 async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    if not settings.gemini_api_key:
-        logger.warning("Gemini API key not configured")
+    if not gemini_client:
+        logger.warning("Gemini client not configured")
         return None
 
     meme_data = load_meme_data()
     try:
         # Configure safety settings to be more permissive for meme humor
         safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
         ]
 
-        model = genai.GenerativeModel(
-            model_name="gemini-3-flash-preview",
+        config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=2048,
-                temperature=1.0,
-                response_mime_type="application/json",
-            ),
-            safety_settings=safety_settings
+            max_output_tokens=2048,
+            temperature=1.0,
+            response_mime_type="application/json",
+            safety_settings=safety_settings,
         )
         
         # Use async generation
-        resp = await model.generate_content_async(prompt)
+        resp = await gemini_client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt,
+            config=config
+        )
         
         # 1. Candidate check
         if not resp.candidates:
-            logger.error("Gemini returned no candidates. Prompt feedback: %s", getattr(resp, 'prompt_feedback', 'N/A'))
+            logger.error("Gemini returned no candidates.")
             return None
 
         candidate = resp.candidates[0]
         
         # 2. Safety/Finish reason check
-        # finish_reason 1 is STOP (Success), others usually mean blocked or error
-        if candidate.finish_reason != 1:
-            logger.error("Gemini generation blocked/failed. Reason: %s. Safety: %s", 
-                         candidate.finish_reason, 
-                         [{"category": r.category, "rating": r.probability} for r in candidate.safety_ratings] if hasattr(candidate, 'safety_ratings') else "N/A")
+        # In new SDK, finish_reason is an enum/string
+        if candidate.finish_reason not in ("STOP", "MAX_TOKENS", 1): # 1 was STOP in old SDK
+            logger.error("Gemini generation blocked/failed. Reason: %s", candidate.finish_reason)
             return None
 
         # 3. Content extraction
