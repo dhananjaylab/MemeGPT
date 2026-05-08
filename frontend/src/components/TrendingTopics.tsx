@@ -110,93 +110,39 @@ export function TrendingTopics({
         </div>
       )}
 
-      {showSingle ? (
-        <div className="space-y-2">
-          <div className="flex justify-end gap-1">
-            <button
-              onClick={() => setCurrentIndex((idx) => (idx - 1 + topics.length) % topics.length)}
-              className="glass-button p-1.5"
-              aria-label="Previous topic"
-            >
-              <ChevronUp size={14} />
-            </button>
-            <button
-              onClick={() => setCurrentIndex((idx) => (idx + 1) % topics.length)}
-              className="glass-button p-1.5"
-              aria-label="Next topic"
-            >
-              <ChevronDown size={14} />
-            </button>
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.button
-              key={`${currentTopic.name}-${currentIndex}`}
-              onClick={() => onTopicSelect?.(currentTopic.name)}
-              className="group w-full text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
-                    {currentTopic.name}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-muted bg-surface-3 px-1.5 py-0.5 rounded">
-                      {currentTopic.source}
-                    </span>
-                    <span className="text-xs text-secondary">
-                      {currentTopic.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {getTrendIcon(currentTopic.trend_direction)}
-                  <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
+      <div className={`grid ${variant === 'sidebar' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-2`}>
+        {topics.map((topic, idx) => (
+          <motion.button
+            key={`${topic.name}-${idx}`}
+            onClick={() => onTopicSelect?.(topic.name)}
+            className="group text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
+            whileHover={{ x: 4 }}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.05 }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
+                  {topic.name}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] uppercase font-bold text-muted bg-surface-3 px-1.5 py-0.5 rounded tracking-tighter">
+                    {topic.source}
+                  </span>
+                  <span className="text-[10px] text-secondary font-mono">
+                    {topic.count.toLocaleString()}
+                  </span>
                 </div>
               </div>
-            </motion.button>
-          </AnimatePresence>
-          <p className="text-[10px] text-muted text-right">
-            {currentIndex + 1} / {topics.length}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          {topics.map((topic, idx) => (
-            <motion.button
-              key={`${topic.name}-${idx}`}
-              onClick={() => onTopicSelect?.(topic.name)}
-              className="group text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
-              whileHover={{ x: 4 }}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.05 }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
-                    {topic.name}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-muted bg-surface-3 px-1.5 py-0.5 rounded">
-                      {topic.source}
-                    </span>
-                    <span className="text-xs text-secondary">
-                      {topic.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {getTrendIcon(topic.trend_direction)}
-                  <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
-                </div>
+              <div className="flex items-center gap-1">
+                {getTrendIcon(topic.trend_direction)}
+                <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
               </div>
-            </motion.button>
-          ))}
-        </div>
-      )}
+            </div>
+          </motion.button>
+        ))}
+      </div>
 
       <p className="text-xs text-muted text-center mt-4 pt-3 border-t border-border">
         Refreshes every 5 minutes

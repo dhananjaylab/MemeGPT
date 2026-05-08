@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Zap, Edit3, Radio, ArrowRight, Wand2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -33,9 +34,12 @@ const features = [
 ];
 
 export function Home() {
+  const [selectedTopic, setSelectedTopic] = useState<string>('');
+
   return (
     <PageTransition>
       <div className="space-y-16 pb-16">
+        <div id="generator-top" className="absolute -top-20" />
 
         {/* ── Hero ─────────────────────────────────────────────────────── */}
         <motion.section
@@ -114,9 +118,10 @@ export function Home() {
         {/* ── Generator + Trending ─────────────────────────────────────── */}
         <motion.section
           variants={staggerChild}
-          className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start"
+          className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start"
         >
-          <div className="lg:col-span-4 space-y-4">
+          {/* Generator Area (3/4) */}
+          <div className="lg:col-span-3 space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-2xl md:text-3xl font-bold">Synthesize A Meme</h2>
               <Link to="/synthesize" className="btn-ghost text-xs">
@@ -124,7 +129,18 @@ export function Home() {
                 <ArrowRight size={12} />
               </Link>
             </div>
-            <MemeGenerator />
+            <MemeGenerator topic={selectedTopic} />
+          </div>
+
+          {/* Sidebar (1/4) */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="sticky top-24 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted">
+                <Radio size={14} className="text-acid" />
+                Trending Now
+              </div>
+              <TrendingTopics onTopicSelect={setSelectedTopic} maxItems={6} variant="sidebar" />
+            </div>
           </div>
         </motion.section>
 
