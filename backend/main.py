@@ -162,6 +162,6 @@ for _name, _path in [
 ]:
     if _path.exists():
         app.mount(f"/{_name}", StaticFiles(directory=str(_path)), name=_name)
-        print(f"[OK] Mounted /{_name} → {_path}")
+        print(f"[OK] Mounted /{_name} -> {_path}")
     else:
         print(f"[WARNING] Static dir not found: {_path}")

@@ -21,6 +21,8 @@ from openai import AsyncOpenAI
 
 from core.config import settings
 
+from pydantic import BaseModel, Field
+
 logger = logging.getLogger(__name__)
 
 ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent
@@ -30,6 +32,19 @@ class AIProvider(str, Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
     BOTH   = "both"
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
+
+class MemeOutput(BaseModel):
+    meme_id: int = Field(description="The integer ID of the template from the provided list")
+    meme_name: str = Field(description="The name of the template")
+    meme_text: List[str] = Field(description="The captions to place on the meme")
+    reasoning: str = Field(description="One sentence explaining why this template fits the prompt")
+
+
+class MemeList(BaseModel):
+    output: List[MemeOutput] = Field(description="Exactly 3 generated meme options")
 
 
 # ── Clients ───────────────────────────────────────────────────────────────────
@@ -60,20 +75,7 @@ CULTURAL CONTEXT — GEN-Z INTERNET HUMOR (2023-2025):
 • Self-deprecating and situational > preachy or lecture-y
 """
 
-_OUTPUT_SCHEMA = """
-Return ONLY a valid JSON object (no markdown, no code fences) with this shape:
-{
-  "output": [
-    {
-      "meme_id": <integer>,
-      "meme_name": "<string>",
-      "meme_text": ["<text1>", "<text2>", ...],
-      "reasoning": "<one sentence>"
-    }
-    // exactly 3 items
-  ]
-}
-"""
+_OUTPUT_SCHEMA_DESC = "Return a JSON object with an 'output' array containing exactly 3 meme objects."
 
 
 def _build_openai_system(meme_data: str) -> str:
@@ -93,7 +95,7 @@ RULES:
 6. The second option can be more niche/absurdist.
 7. The third option should be the wildcard / unexpected angle.
 
-{_OUTPUT_SCHEMA}"""
+{_OUTPUT_SCHEMA_DESC}"""
 
 
 def _build_gemini_system(meme_data: str) -> str:
@@ -109,7 +111,7 @@ Rules:
 - Match the exact number of text fields per template
 - Return ONLY valid JSON, no extra text
 
-{_OUTPUT_SCHEMA}"""
+{_OUTPUT_SCHEMA_DESC}"""
 
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
@@ -161,6 +163,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
             max_output_tokens=2048,
             temperature=1.0,
             response_mime_type="application/json",
+            response_schema=MemeList,
             safety_settings=safety_settings,
         )
         
@@ -191,16 +194,11 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
             logger.error("Failed to extract text from Gemini candidate: %s", e)
             return None
         
-        # 4. Robust JSON Parsing
-        json_str = raw
-        if "```json" in raw:
-            json_str = raw.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw:
-            json_str = raw.split("```")[1].split("```")[0].strip()
-        
+        # 4. Parse Structured Output
         try:
-            data = json.loads(json_str)
-            # Support both {"output": [...]} and a direct array if the model gets confused
+            # The model might return a JSON string in candidate.content.parts[0].text
+            # With response_schema, it should be clean JSON.
+            data = json.loads(raw)
             if isinstance(data, dict):
                 return data.get("output", [])
             elif isinstance(data, list):
@@ -208,16 +206,6 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
             return None
         except json.JSONDecodeError:
             logger.error("Failed to parse Gemini JSON. Raw output: %s", raw[:500])
-            # Last resort: try regex
-            import re
-            match = re.search(r'(\{.*\}|\[.*\])', raw, re.DOTALL)
-            if match:
-                try:
-                    extracted = json.loads(match.group(1))
-                    if isinstance(extracted, dict): return extracted.get("output", [])
-                    if isinstance(extracted, list): return extracted
-                except:
-                    pass
             return None
     except Exception as exc:
         logger.exception("Gemini caption generation failed: %s", exc)
@@ -227,19 +215,30 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 async def get_caption_generator(provider: Optional[str] = None):
-    """Return the best available caption generator for the requested provider."""
-    p = (provider or settings.ai_provider).lower()
+    """Return a robust caption generator with built-in provider failover."""
+    requested_provider = (provider or settings.ai_provider).lower()
 
-    if p == AIProvider.GEMINI.value and settings.has_gemini:
-        return generate_meme_captions_with_gemini
+    async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
+        # 1. Try requested provider
+        if requested_provider == AIProvider.GEMINI.value and settings.has_gemini:
+            logger.info("Attempting caption generation with Gemini...")
+            result = await generate_meme_captions_with_gemini(prompt)
+            if result: return result
+            logger.warning("Gemini failed, falling back to OpenAI...")
 
-    if p == AIProvider.OPENAI.value and settings.has_openai:
-        return generate_meme_captions
+        if requested_provider == AIProvider.OPENAI.value and settings.has_openai:
+            logger.info("Attempting caption generation with OpenAI...")
+            result = await generate_meme_captions(prompt)
+            if result: return result
+            logger.warning("OpenAI failed, falling back to Gemini...")
 
-    # Fallback: use whichever is configured
-    if settings.has_openai:
-        return generate_meme_captions
-    if settings.has_gemini:
-        return generate_meme_captions_with_gemini
+        # 2. Try the other one as fallback if first one failed
+        if requested_provider == AIProvider.GEMINI.value and settings.has_openai:
+            return await generate_meme_captions(prompt)
+        
+        if requested_provider == AIProvider.OPENAI.value and settings.has_gemini:
+            return await generate_meme_captions_with_gemini(prompt)
 
-    raise RuntimeError("No AI provider configured — set OPENAI_API_KEY or GEMINI_API_KEY")
+        return None
+
+    return robust_generator
