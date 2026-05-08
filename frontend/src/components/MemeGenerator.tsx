@@ -283,7 +283,7 @@ export function MemeGenerator() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
+              className={`grid grid-cols-1 ${autoSuggestions.length > 0 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}
             >
               <div className="glass-card border border-border p-6 rounded-xl space-y-4">
                 <h3 className="font-semibold flex items-center gap-2">

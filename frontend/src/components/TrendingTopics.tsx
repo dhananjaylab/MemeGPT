@@ -101,12 +101,14 @@ export function TrendingTopics({
 
   return (
     <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold flex items-center gap-2">
-          <TrendingUp size={18} className="text-acid" />
-          Trending Now
-        </h3>
-      </div>
+      {variant !== 'sidebar' && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2">
+            <TrendingUp size={18} className="text-acid" />
+            Trending Now
+          </h3>
+        </div>
+      )}
 
       {showSingle ? (
         <div className="space-y-2">

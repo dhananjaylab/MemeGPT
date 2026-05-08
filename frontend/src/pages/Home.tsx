@@ -116,7 +116,7 @@ export function Home() {
           variants={staggerChild}
           className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start"
         >
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-4 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-2xl md:text-3xl font-bold">Synthesize A Meme</h2>
               <Link to="/synthesize" className="btn-ghost text-xs">
@@ -125,10 +125,6 @@ export function Home() {
               </Link>
             </div>
             <MemeGenerator />
-          </div>
-
-          <div className="lg:col-span-1 lg:sticky lg:top-6">
-            <TrendingTopics maxItems={6} variant="sidebar" />
           </div>
         </motion.section>
 
