@@ -27,15 +27,26 @@ export function TrendingTopics({
 
   useEffect(() => {
     const fetchTopics = async () => {
+      const endpoint = `/api/trending/topics?limit=${maxItems}`;
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H3',location:'frontend/src/components/TrendingTopics.tsx:33',message:'Trending topics request start',data:{endpoint,maxItems,origin:window.location.origin,pathname:window.location.pathname},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setIsLoading(true);
-        const response = await fetch(`/api/trending/topics?limit=${maxItems}`);
+        const response = await fetch(endpoint);
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H4',location:'frontend/src/components/TrendingTopics.tsx:37',message:'Trending topics response received',data:{endpoint,status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (!response.ok) {
           throw new Error(`Failed to fetch trending topics: ${response.statusText}`);
         }
         const data = await response.json();
         setTopics(data.topics || []);
       } catch (err) {
+        const normalizedError = err instanceof Error ? { name: err.name, message: err.message } : { value: String(err) };
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H5',location:'frontend/src/components/TrendingTopics.tsx:45',message:'Trending topics request failed',data:{endpoint,error:normalizedError},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         console.error('Error fetching trending topics:', err);
         setError(err instanceof Error ? err.message : 'Failed to load trending topics');
       } finally {
