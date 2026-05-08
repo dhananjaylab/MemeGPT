@@ -19,7 +19,12 @@ export function MemeCard({ meme, showStats = false, className = '' }: MemeCardPr
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(meme.image_url);
+      const isExternal = meme.image_url.startsWith('http');
+      const downloadUrl = isExternal 
+        ? `/api/memes/proxy-image?url=${encodeURIComponent(meme.image_url)}`
+        : meme.image_url;
+
+      const response = await fetch(downloadUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');

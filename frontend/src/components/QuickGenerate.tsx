@@ -92,7 +92,12 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
   const handleDownload = async () => {
     if (!result) return;
     try {
-      const res = await fetch(result.image_url);
+      const isExternal = result.image_url.startsWith('http');
+      const downloadUrl = isExternal 
+        ? `/api/memes/proxy-image?url=${encodeURIComponent(result.image_url)}`
+        : result.image_url;
+
+      const res = await fetch(downloadUrl);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
