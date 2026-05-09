@@ -92,7 +92,12 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
   const handleDownload = async () => {
     if (!result) return;
     try {
-      const res = await fetch(result.image_url);
+      const isExternal = result.image_url.startsWith('http');
+      const downloadUrl = isExternal 
+        ? `/api/memes/proxy-image?url=${encodeURIComponent(result.image_url)}`
+        : result.image_url;
+
+      const res = await fetch(downloadUrl);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -121,7 +126,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
   };
 
   return (
-    <div className="space-y-4">
+    <div className={`grid grid-cols-1 ${result ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
       {/* ── Input area ─────────────────────────────────────────────────────── */}
       <div className="glass-card border border-border rounded-2xl p-5 space-y-4">
         {/* Header row */}
@@ -161,7 +166,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={isGenerating}
-            rows={3}
+            rows={4}
             maxLength={500}
             className="w-full bg-surface-2/80 border border-border hover:border-acid/30 focus:border-acid/60 rounded-xl px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none transition-all resize-none disabled:opacity-50"
           />
@@ -200,16 +205,16 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
         {result && (
           <motion.div
             key={result.meme_id}
-            initial={{ opacity: 0, y: 16, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            initial={{ opacity: 0, x: 20, scale: 0.97 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -20, scale: 0.97 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="glass-card border border-acid/25 rounded-2xl overflow-hidden"
+            className="glass-card border border-acid/25 rounded-2xl overflow-hidden h-full flex flex-col"
           >
             {/* Meta strip */}
             <div className="flex items-center justify-between px-4 py-2 bg-acid/5 border-b border-acid/15">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-secondary truncate max-w-[200px]">
+                <span className="text-[10px] font-mono text-secondary truncate max-w-[120px]">
                   {result.template_name}
                 </span>
                 {result.cache_hit && (
@@ -225,11 +230,11 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
             </div>
 
             {/* Meme image */}
-            <div className="bg-surface-2">
+            <div className="bg-surface-2 flex-1 flex items-center justify-center overflow-hidden">
               <img
                 src={result.image_url}
                 alt={result.meme_text.join(' / ')}
-                className="w-full object-contain max-h-[500px]"
+                className="w-full h-full object-contain max-h-[400px]"
                 loading="lazy"
               />
             </div>
@@ -244,7 +249,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
             </div>
 
             {/* Action bar */}
-            <div className="flex items-center gap-2 px-4 pb-4">
+            <div className="flex items-center gap-2 px-4 pb-4 mt-auto">
               <button
                 onClick={handleRegenerate}
                 disabled={isGenerating}

@@ -148,23 +148,40 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
     meme_data = load_meme_data()
     try:
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+        ]
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-3-flash-preview",
             system_instruction=_build_gemini_system(meme_data),
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=2048,
                 temperature=1.0,
                 response_mime_type="application/json",
             ),
+            safety_settings=safety_settings
         )
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip()
+        resp = await model.generate_content_async(prompt)
+        
+        if not resp.candidates:
+            return None
+        
+        candidate = resp.candidates[0]
+        if candidate.finish_reason != 1:
+            return None
+            
+        raw = (candidate.content.parts[0].text or "").strip()
         # Strip accidental markdown fences
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw)
+        json_str = raw
+        if "```json" in raw:
+            json_str = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            json_str = raw.split("```")[1].split("```")[0].strip()
+            
+        data = json.loads(json_str)
         return data.get("output", [])
     except Exception as exc:
         logger.error("Gemini caption generation failed: %s", exc)

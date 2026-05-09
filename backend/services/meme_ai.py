@@ -15,10 +15,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from openai import AsyncOpenAI
 
 from core.config import settings
+
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +34,23 @@ class AIProvider(str, Enum):
     BOTH   = "both"
 
 
+# ── Schemas ───────────────────────────────────────────────────────────────────
+
+class MemeOutput(BaseModel):
+    meme_id: int = Field(description="The integer ID of the template from the provided list")
+    meme_name: str = Field(description="The name of the template")
+    meme_text: List[str] = Field(description="The captions to place on the meme")
+    reasoning: str = Field(description="One sentence explaining why this template fits the prompt")
+
+
+class MemeList(BaseModel):
+    output: List[MemeOutput] = Field(description="Exactly 3 generated meme options")
+
+
 # ── Clients ───────────────────────────────────────────────────────────────────
 openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
-if settings.gemini_api_key:
-    genai.configure(api_key=settings.gemini_api_key)
+gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 
 # ── Template data ─────────────────────────────────────────────────────────────
@@ -58,22 +73,12 @@ CULTURAL CONTEXT — GEN-Z INTERNET HUMOR (2023-2025):
   irony, academic pressure, social anxiety, and absurd escalation
 • Short punchy captions beat long ones — aim for impact in ≤ 8 words per field
 • Self-deprecating and situational > preachy or lecture-y
+
+CRITICAL: Follow the exact text field order specified in each template's usage_instructions.
+The order matters for the meme to make sense!
 """
 
-_OUTPUT_SCHEMA = """
-Return ONLY a valid JSON object (no markdown, no code fences) with this shape:
-{
-  "output": [
-    {
-      "meme_id": <integer>,
-      "meme_name": "<string>",
-      "meme_text": ["<text1>", "<text2>", ...],
-      "reasoning": "<one sentence>"
-    }
-    // exactly 3 items
-  ]
-}
-"""
+_OUTPUT_SCHEMA_DESC = "Return a JSON object with an 'output' array containing exactly 3 meme objects."
 
 
 def _build_openai_system(meme_data: str) -> str:
@@ -87,13 +92,17 @@ AVAILABLE TEMPLATES:
 RULES:
 1. Pick 3 DIFFERENT templates — variety is key.
 2. Match the template structure exactly (number of text fields, tone).
-3. Keep text SHORT and punchy (max 10 words per field).
-4. Be funny, not cringe. Lean into current internet culture.
-5. The first option should be the most relatable/mainstream.
-6. The second option can be more niche/absurdist.
-7. The third option should be the wildcard / unexpected angle.
+3. **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template.
+   - For "Distracted Boyfriend": [seductive thing, person, current commitment]
+   - For "Left Exit 12": [main road, person, exit road]
+   - Read the usage_instructions carefully and follow the field order!
+4. Keep text SHORT and punchy (max 10 words per field).
+5. Be funny, not cringe. Lean into current internet culture.
+6. The first option should be the most relatable/mainstream.
+7. The second option can be more niche/absurdist.
+8. The third option should be the wildcard / unexpected angle.
 
-{_OUTPUT_SCHEMA}"""
+Provide exactly 3 meme options with proper JSON structure."""
 
 
 def _build_gemini_system(meme_data: str) -> str:
@@ -105,11 +114,10 @@ Available templates: {meme_data}
 
 Rules:
 - Choose 3 different templates that best fit the user's prompt
+- **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template
 - Text must be SHORT (max 10 words per field) and punchy
 - Match the exact number of text fields per template
-- Return ONLY valid JSON, no extra text
-
-{_OUTPUT_SCHEMA}"""
+- Provide exactly 3 meme options with proper structure"""
 
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
@@ -131,9 +139,91 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             max_tokens=2048,
             response_format={"type": "json_object"},
         )
+        
         content = resp.choices[0].message.content or ""
+        if not content.strip():
+            logger.error("OpenAI returned empty content")
+            return None
+            
+        logger.debug("Raw OpenAI response: %s", content[:200])
+        
         data = json.loads(content)
-        return data.get("output", [])
+        
+        # Debug logging
+        logger.debug("OpenAI response structure: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+        
+        output = data.get("output", [])
+        
+        # If output is empty, check if the data itself is the array
+        if not output and isinstance(data, list):
+            output = data
+        elif not output and isinstance(data, dict):
+            # Check for alternative keys (OpenAI uses different response formats)
+            output = data.get("memes", data.get("results", data.get("meme_options", data.get("options", data.get("examples", [])))))
+        
+        if not output or not isinstance(output, list):
+            logger.error("OpenAI returned empty or invalid output array. Data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
+            return None
+        
+        # Validate each meme object has required fields
+        valid_memes = []
+        for meme in output:
+            if not isinstance(meme, dict):
+                logger.warning("Skipping invalid meme object: %s", meme)
+                continue
+            
+            # Check for required fields with flexible naming (OpenAI uses different field names)
+            meme_id = meme.get("meme_id") or meme.get("id") or meme.get("template_id")
+            meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
+            meme_text = (meme.get("meme_text") or meme.get("text") or meme.get("captions") or 
+                        meme.get("text_fields") or meme.get("input_texts") or 
+                        meme.get("fields") or meme.get("output"))
+            
+            # If we have template_name but no ID, try to look it up
+            if meme_id is None and meme_name:
+                try:
+                    meme_data_obj = json.loads(load_meme_data())
+                    # Try exact match first
+                    template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
+                    if template:
+                        meme_id = template["id"]
+                        logger.debug("Looked up template ID %d for name '%s'", meme_id, meme_name)
+                except Exception as e:
+                    logger.warning("Failed to look up template ID for name '%s': %s", meme_name, e)
+            
+            if meme_id is None or not meme_text:
+                logger.warning("Skipping incomplete meme object (missing ID or text): %s", meme)
+                continue
+            
+            # For OpenAI, we might need to look up the template name if not provided
+            if not meme_name:
+                # Try to get template name from the meme data if we have template_id
+                try:
+                    meme_data_obj = json.loads(load_meme_data())
+                    template = next((t for t in meme_data_obj if t["id"] == int(meme_id)), None)
+                    meme_name = template["name"] if template else f"Template {meme_id}"
+                except:
+                    meme_name = f"Template {meme_id}"
+            
+            # Normalize the meme object
+            normalized_meme = {
+                "meme_id": int(meme_id),
+                "meme_name": str(meme_name),
+                "meme_text": list(meme_text) if isinstance(meme_text, list) else [str(meme_text)],
+                "reasoning": meme.get("reasoning", "Generated by OpenAI")
+            }
+            valid_memes.append(normalized_meme)
+        
+        if not valid_memes:
+            logger.error("No valid memes found in OpenAI response")
+            return None
+        
+        logger.info("OpenAI generated %d valid memes", len(valid_memes))
+        return valid_memes
+        
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse OpenAI JSON. Error: %s, Content: %s", e, content[:500])
+        return None
     except Exception as exc:
         logger.error("OpenAI caption generation failed: %s", exc)
         return None
@@ -142,51 +232,227 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
 async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    if not settings.gemini_api_key:
-        logger.warning("Gemini API key not configured")
+    if not gemini_client:
+        logger.warning("Gemini client not configured")
         return None
 
     meme_data = load_meme_data()
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+        # Configure safety settings to be more permissive for meme humor
+        safety_settings = [
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
+        ]
+
+        config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=2048,
-                temperature=1.0,
-                response_mime_type="application/json",
-            ),
+            max_output_tokens=2048,
+            temperature=1.0,
+            response_mime_type="application/json",
+            response_schema=MemeList,
+            safety_settings=safety_settings,
         )
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip()
-        # Strip accidental markdown fences
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw)
-        return data.get("output", [])
+        
+        # Use async generation
+        resp = await gemini_client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt,
+            config=config
+        )
+        
+        # 1. Candidate check
+        if not resp.candidates:
+            logger.error("Gemini returned no candidates.")
+            return None
+
+        candidate = resp.candidates[0]
+        
+        # 2. Safety/Finish reason check
+        # In new SDK, finish_reason is an enum/string
+        if candidate.finish_reason not in ("STOP", "MAX_TOKENS", 1): # 1 was STOP in old SDK
+            logger.error("Gemini generation blocked/failed. Reason: %s", candidate.finish_reason)
+            return None
+
+        # 3. Content extraction
+        try:
+            raw = candidate.content.parts[0].text.strip()
+            logger.debug("Raw Gemini response: %s", raw[:200])
+        except (AttributeError, IndexError) as e:
+            logger.error("Failed to extract text from Gemini candidate: %s", e)
+            return None
+        
+        # 4. Parse Structured Output
+        try:
+            # With response_schema, the output should be clean JSON
+            # But sometimes there might be truncated responses, so let's be more robust
+            if not raw:
+                logger.error("Gemini returned empty response")
+                return None
+                
+            # Try to fix common JSON issues
+            if raw.count('"') % 2 != 0:
+                logger.warning("Detected unterminated string in Gemini response, attempting to fix")
+                # Find the last complete object
+                last_complete = raw.rfind('"}')
+                if last_complete > 0:
+                    # Try to close the JSON properly
+                    raw = raw[:last_complete + 2] + ']}'
+                    logger.debug("Attempted JSON fix: %s", raw[-50:])
+            
+            # Try to fix missing commas between objects
+            if '"}{"' in raw:
+                logger.warning("Detected missing comma between objects, attempting to fix")
+                raw = raw.replace('"}{"', '"},{"')
+                logger.debug("Fixed missing commas")
+            
+            # Try to fix incomplete strings at the end
+            if raw.endswith('"') and not raw.endswith('"}'):
+                logger.warning("Detected incomplete string at end, attempting to fix")
+                raw = raw + '"}]}'
+                logger.debug("Added closing brackets")
+            elif not raw.endswith('}'):
+                logger.warning("Response doesn't end with closing bracket, attempting to fix")
+                # Count opening and closing brackets
+                open_braces = raw.count('{')
+                close_braces = raw.count('}')
+                open_brackets = raw.count('[')
+                close_brackets = raw.count(']')
+                
+                # Add missing closing brackets
+                if close_braces < open_braces:
+                    raw += '}' * (open_braces - close_braces)
+                if close_brackets < open_brackets:
+                    raw += ']' * (open_brackets - close_brackets)
+                logger.debug("Added missing closing brackets")
+            
+            data = json.loads(raw)
+            
+            # Handle different response formats
+            if isinstance(data, dict):
+                output = data.get("output", [])
+            elif isinstance(data, list):
+                output = data
+            else:
+                logger.error("Unexpected Gemini response format: %s", type(data))
+                return None
+            
+            # Validate the output structure
+            if not output or not isinstance(output, list):
+                logger.error("Gemini returned empty or invalid output array")
+                return None
+            
+            # Validate each meme object has required fields
+            valid_memes = []
+            for meme in output:
+                if not isinstance(meme, dict):
+                    logger.warning("Skipping invalid meme object: %s", meme)
+                    continue
+                
+                # Check for required fields with flexible naming
+                meme_id = meme.get("meme_id") or meme.get("id") or meme.get("template_id")
+                meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
+                meme_text = meme.get("meme_text") or meme.get("text") or meme.get("captions") or meme.get("input_texts")
+                
+                # If we have template_name but no ID, try to look it up
+                if meme_id is None and meme_name:
+                    try:
+                        meme_data_obj = json.loads(load_meme_data())
+                        # Try exact match first
+                        template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
+                        if template:
+                            meme_id = template["id"]
+                            logger.debug("Looked up template ID %d for name '%s'", meme_id, meme_name)
+                    except Exception as e:
+                        logger.warning("Failed to look up template ID for name '%s': %s", meme_name, e)
+                
+                if meme_id is None or not meme_name or not meme_text:
+                    logger.warning("Skipping incomplete meme object (missing ID, name, or text): %s", meme)
+                    continue
+                
+                # Normalize the meme object
+                normalized_meme = {
+                    "meme_id": int(meme_id),
+                    "meme_name": str(meme_name),
+                    "meme_text": list(meme_text) if isinstance(meme_text, list) else [str(meme_text)],
+                    "reasoning": meme.get("reasoning", "Generated by Gemini")
+                }
+                valid_memes.append(normalized_meme)
+            
+            if not valid_memes:
+                logger.error("No valid memes found in Gemini response")
+                return None
+            
+            logger.info("Gemini generated %d valid memes", len(valid_memes))
+            return valid_memes
+            
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse Gemini JSON. Error: %s, Raw output: %s", e, raw[:500])
+            return None
+            
     except Exception as exc:
-        logger.error("Gemini caption generation failed: %s", exc)
+        logger.exception("Gemini caption generation failed: %s", exc)
         return None
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 async def get_caption_generator(provider: Optional[str] = None):
-    """Return the best available caption generator for the requested provider."""
-    p = (provider or settings.ai_provider).lower()
+    """Return a robust caption generator with built-in provider failover."""
+    requested_provider = (provider or settings.ai_provider).lower()
 
-    if p == AIProvider.GEMINI.value and settings.has_gemini:
-        return generate_meme_captions_with_gemini
+    async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
+        # 1. Try requested provider first
+        if requested_provider == AIProvider.GEMINI.value and settings.has_gemini:
+            logger.info("Attempting caption generation with Gemini...")
+            result = await generate_meme_captions_with_gemini(prompt)
+            if result and len(result) > 0:
+                logger.info("Gemini generation successful")
+                return result
+            logger.warning("Gemini failed or returned empty results, falling back to OpenAI...")
 
-    if p == AIProvider.OPENAI.value and settings.has_openai:
-        return generate_meme_captions
+        elif requested_provider == AIProvider.OPENAI.value and settings.has_openai:
+            logger.info("Attempting caption generation with OpenAI...")
+            result = await generate_meme_captions(prompt)
+            if result and len(result) > 0:
+                logger.info("OpenAI generation successful")
+                return result
+            logger.warning("OpenAI failed or returned empty results, falling back to Gemini...")
 
-    # Fallback: use whichever is configured
-    if settings.has_openai:
-        return generate_meme_captions
-    if settings.has_gemini:
-        return generate_meme_captions_with_gemini
+        # 2. Try fallback provider if primary failed
+        if requested_provider == AIProvider.GEMINI.value and settings.has_openai:
+            logger.info("Attempting fallback to OpenAI...")
+            result = await generate_meme_captions(prompt)
+            if result and len(result) > 0:
+                logger.info("OpenAI fallback successful")
+                return result
+            logger.error("Both Gemini and OpenAI failed")
+        
+        elif requested_provider == AIProvider.OPENAI.value and settings.has_gemini:
+            logger.info("Attempting fallback to Gemini...")
+            result = await generate_meme_captions_with_gemini(prompt)
+            if result and len(result) > 0:
+                logger.info("Gemini fallback successful")
+                return result
+            logger.error("Both OpenAI and Gemini failed")
 
-    raise RuntimeError("No AI provider configured — set OPENAI_API_KEY or GEMINI_API_KEY")
+        # 3. If no provider was configured for the requested type, try any available
+        if not settings.has_gemini and not settings.has_openai:
+            logger.error("No AI providers configured")
+            return None
+
+        if requested_provider == AIProvider.GEMINI.value and not settings.has_gemini:
+            if settings.has_openai:
+                logger.warning("Gemini not configured, using OpenAI instead")
+                return await generate_meme_captions(prompt)
+        
+        if requested_provider == AIProvider.OPENAI.value and not settings.has_openai:
+            if settings.has_gemini:
+                logger.warning("OpenAI not configured, using Gemini instead")
+                return await generate_meme_captions_with_gemini(prompt)
+
+        logger.error("All caption generation attempts failed")
+        return None
+
+    return robust_generator

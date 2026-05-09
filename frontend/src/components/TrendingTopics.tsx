@@ -27,15 +27,26 @@ export function TrendingTopics({
 
   useEffect(() => {
     const fetchTopics = async () => {
+      const endpoint = `/api/trending/topics?limit=${maxItems}`;
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H3',location:'frontend/src/components/TrendingTopics.tsx:33',message:'Trending topics request start',data:{endpoint,maxItems,origin:window.location.origin,pathname:window.location.pathname},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setIsLoading(true);
-        const response = await fetch(`/api/trending/topics?limit=${maxItems}`);
+        const response = await fetch(endpoint);
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H4',location:'frontend/src/components/TrendingTopics.tsx:37',message:'Trending topics response received',data:{endpoint,status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (!response.ok) {
           throw new Error(`Failed to fetch trending topics: ${response.statusText}`);
         }
         const data = await response.json();
         setTopics(data.topics || []);
       } catch (err) {
+        const normalizedError = err instanceof Error ? { name: err.name, message: err.message } : { value: String(err) };
+        // #region agent log
+        fetch('http://127.0.0.1:7248/ingest/4bc30d7b-be40-43cb-a209-7c4afed73eca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e70ed4'},body:JSON.stringify({sessionId:'e70ed4',runId:'initial',hypothesisId:'H5',location:'frontend/src/components/TrendingTopics.tsx:45',message:'Trending topics request failed',data:{endpoint,error:normalizedError},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         console.error('Error fetching trending topics:', err);
         setError(err instanceof Error ? err.message : 'Failed to load trending topics');
       } finally {
@@ -90,100 +101,48 @@ export function TrendingTopics({
 
   return (
     <div className={`glass-card border border-border p-4 ${variant === 'inline' ? 'w-full' : ''}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold flex items-center gap-2">
-          <TrendingUp size={18} className="text-acid" />
-          Trending Now
-        </h3>
-      </div>
-
-      {showSingle ? (
-        <div className="space-y-2">
-          <div className="flex justify-end gap-1">
-            <button
-              onClick={() => setCurrentIndex((idx) => (idx - 1 + topics.length) % topics.length)}
-              className="glass-button p-1.5"
-              aria-label="Previous topic"
-            >
-              <ChevronUp size={14} />
-            </button>
-            <button
-              onClick={() => setCurrentIndex((idx) => (idx + 1) % topics.length)}
-              className="glass-button p-1.5"
-              aria-label="Next topic"
-            >
-              <ChevronDown size={14} />
-            </button>
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.button
-              key={`${currentTopic.name}-${currentIndex}`}
-              onClick={() => onTopicSelect?.(currentTopic.name)}
-              className="group w-full text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
-                    {currentTopic.name}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-muted bg-surface-3 px-1.5 py-0.5 rounded">
-                      {currentTopic.source}
-                    </span>
-                    <span className="text-xs text-secondary">
-                      {currentTopic.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {getTrendIcon(currentTopic.trend_direction)}
-                  <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
-                </div>
-              </div>
-            </motion.button>
-          </AnimatePresence>
-          <p className="text-[10px] text-muted text-right">
-            {currentIndex + 1} / {topics.length}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          {topics.map((topic, idx) => (
-            <motion.button
-              key={`${topic.name}-${idx}`}
-              onClick={() => onTopicSelect?.(topic.name)}
-              className="group text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
-              whileHover={{ x: 4 }}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.05 }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
-                    {topic.name}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-muted bg-surface-3 px-1.5 py-0.5 rounded">
-                      {topic.source}
-                    </span>
-                    <span className="text-xs text-secondary">
-                      {topic.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {getTrendIcon(topic.trend_direction)}
-                  <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
-                </div>
-              </div>
-            </motion.button>
-          ))}
+      {variant !== 'sidebar' && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2">
+            <TrendingUp size={18} className="text-acid" />
+            Trending Now
+          </h3>
         </div>
       )}
+
+      <div className={`grid ${variant === 'sidebar' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-2`}>
+        {topics.map((topic, idx) => (
+          <motion.button
+            key={`${topic.name}-${idx}`}
+            onClick={() => onTopicSelect?.(topic.name)}
+            className="group text-left p-3 rounded-lg border border-border hover:border-acid/50 transition-all hover:bg-surface-2"
+            whileHover={{ x: 4 }}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.05 }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-primary truncate group-hover:text-acid transition-colors">
+                  {topic.name}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] uppercase font-bold text-muted bg-surface-3 px-1.5 py-0.5 rounded tracking-tighter">
+                    {topic.source}
+                  </span>
+                  <span className="text-[10px] text-secondary font-mono">
+                    {topic.count.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {getTrendIcon(topic.trend_direction)}
+                <ChevronRight size={14} className="text-secondary group-hover:text-acid transition-colors" />
+              </div>
+            </div>
+          </motion.button>
+        ))}
+      </div>
 
       <p className="text-xs text-muted text-center mt-4 pt-3 border-t border-border">
         Refreshes every 5 minutes

@@ -125,14 +125,47 @@ async def _compose_and_upload(
     db: AsyncSession,
 ) -> GeneratedMeme:
     """Compose image, upload to storage, persist to DB, return model instance."""
-    image_path = await overlay_text_on_image_async(template_dict, texts)
+    
+    # Check if this is an Imgflip template
+    if template_dict.get("source") == "imgflip" and template_dict.get("imgflip_id"):
+        logger.info(
+            "Using Imgflip API for template %d (imgflip_id=%s)",
+            template_dict["id"], template_dict["imgflip_id"]
+        )
+        try:
+            # Use Imgflip caption API
+            imgflip_result = await imgflip_service.caption_image(
+                template_dict["imgflip_id"],
+                texts
+            )
+            image_url = imgflip_result.get("data", {}).get("url")
+            if not image_url:
+                raise RuntimeError("Imgflip API did not return image URL")
+            
+            logger.info("Imgflip API generated meme: %s", image_url[:100])
+        except Exception as imgflip_exc:
+            logger.error(
+                "Imgflip API failed for template %d: %s. Falling back to compositor.",
+                template_dict["id"], imgflip_exc
+            )
+            # Fallback to local compositor
+            image_path = await overlay_text_on_image_async(template_dict, texts)
+            object_key = f"memes/{uuid4()}.png"
+            upload_result = await upload_to_r2(image_path, object_key)
+            image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+            
+            if not image_url:
+                raise RuntimeError("Image upload failed")
+    else:
+        # Use local compositor for non-Imgflip templates
+        image_path = await overlay_text_on_image_async(template_dict, texts)
 
-    object_key = f"memes/{uuid4()}.png"
-    upload_result = await upload_to_r2(image_path, object_key)
-    image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+        object_key = f"memes/{uuid4()}.png"
+        upload_result = await upload_to_r2(image_path, object_key)
+        image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
-    if not image_url:
-        raise RuntimeError("Image upload failed")
+        if not image_url:
+            raise RuntimeError("Image upload failed")
 
     meme = GeneratedMeme(
         id=str(uuid4()),
@@ -235,13 +268,14 @@ async def generate_meme_quick(
         else:
             generator = await get_caption_generator(body.ai_provider)
             caps = await generator(prompt)
+            logger.error(f"CAPS RETURNED: {caps}")
             if not caps:
                 raise HTTPException(status_code=500, detail="AI failed to generate captions")
             await set_cached_captions(prompt, caps)
             best = caps[0]
 
-        template_id = int(best["meme_id"])
-        texts = best["meme_text"]
+        template_id = int(best.get("meme_id", best.get("id")))
+        texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
     else:
         raise HTTPException(
             status_code=400,
@@ -264,6 +298,8 @@ async def generate_meme_quick(
         "text_coordinates_xy_wh": template.text_coordinates_xy_wh,
         "number_of_text_fields": template.number_of_text_fields,
         "image_url": template.image_url,
+        "source": template.source,
+        "imgflip_id": template.imgflip_id,
     }
 
     # Trim texts to template capacity

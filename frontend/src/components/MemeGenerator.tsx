@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Wand2, Loader2, Sparkles, RefreshCw, ChevronLeft, ChevronRight,
   Zap, Edit3, X,
@@ -52,8 +52,21 @@ const MODES: { id: Mode; label: string; icon: typeof Zap; badge?: string }[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function MemeGenerator() {
+interface MemeGeneratorProps {
+  topic?: string;
+}
+
+export function MemeGenerator({ topic }: MemeGeneratorProps) {
   const [mode, setMode] = useState<Mode>('quick');
+
+  // Update prompt when external topic changes
+  useEffect(() => {
+    if (topic) {
+      setPrompt(topic);
+      setMode('auto'); // Switch to AI mode for trending topics
+      window.scrollTo({ top: document.getElementById('generator-top')?.offsetTop || 0, behavior: 'smooth' });
+    }
+  }, [topic]);
 
   // Auto mode
   const [prompt, setPrompt] = useState('');
@@ -235,289 +248,278 @@ export function MemeGenerator() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      {/* ── Main ──────────────────────────────────────────────────────────── */}
-      <div className="lg:col-span-3 space-y-6">
+    <div className="space-y-6">
+      {/* Mode tabs */}
+      <div className="flex gap-1 bg-surface border border-border rounded-xl p-1">
+        {MODES.map(({ id, label, icon: Icon, badge }) => (
+          <button
+            key={id}
+            onClick={() => setMode(id)}
+            className={`flex-1 py-2.5 px-3 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+              mode === id
+                ? 'bg-acid text-black shadow-sm'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <Icon size={15} />
+            {label}
+            {badge && mode === id && (
+              <span className="hidden sm:inline text-[10px] font-bold opacity-70">{badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
 
-        {/* Mode tabs */}
-        <div className="flex gap-1 bg-surface border border-border rounded-xl p-1">
-          {MODES.map(({ id, label, icon: Icon, badge }) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              className={`flex-1 py-2.5 px-3 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-                mode === id
-                  ? 'bg-acid text-black shadow-sm'
-                  : 'text-secondary hover:text-primary'
-              }`}
-            >
-              <Icon size={15} />
-              {label}
-              {badge && mode === id && (
-                <span className="hidden sm:inline text-[10px] font-bold opacity-70">{badge}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      {/* ── Quick Mode ────────────────────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {mode === 'quick' && (
+          <motion.div
+            key="quick"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <QuickGenerate
+              initialPrompt={prompt}
+              onGenerated={handleQuickGenerated}
+            />
+          </motion.div>
+        )}
 
-        {/* ── Quick Mode ────────────────────────────────────────────────────── */}
-        <AnimatePresence mode="wait">
-          {mode === 'quick' && (
-            <motion.div
-              key="quick"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-            >
-              <QuickGenerate
-                initialPrompt={prompt}
-                onGenerated={handleQuickGenerated}
+        {/* ── AI Mode ─────────────────────────────────────────────────────── */}
+        {mode === 'auto' && (
+          <motion.div
+            key="auto"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`grid grid-cols-1 ${autoSuggestions.length > 0 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}
+          >
+            <div className="glass-card border border-border p-6 rounded-xl space-y-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Sparkles size={18} className="text-acid" />
+                What's the vibe?
+              </h3>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe any situation, feeling, or random thought..."
+                className="w-full h-28 bg-surface-2/80 border border-border hover:border-acid/40 focus:border-acid/60 rounded-xl px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none transition-all resize-none"
               />
-            </motion.div>
-          )}
-
-          {/* ── AI Mode ─────────────────────────────────────────────────────── */}
-          {mode === 'auto' && (
-            <motion.div
-              key="auto"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
-            >
-              <div className="glass-card border border-border p-6 rounded-xl space-y-4">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Sparkles size={18} className="text-acid" />
-                  What's the vibe?
-                </h3>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe any situation, feeling, or random thought..."
-                  className="w-full h-28 bg-surface-2/80 border border-border hover:border-acid/40 focus:border-acid/60 rounded-xl px-4 py-3 text-sm placeholder:text-muted/60 focus:outline-none transition-all resize-none"
-                />
-                <button
-                  onClick={loadSuggestions}
-                  disabled={isLoadingSuggestions || !prompt.trim()}
-                  className="w-full btn-acid justify-center py-3 disabled:opacity-50"
-                >
-                  {isLoadingSuggestions ? (
-                    <><Loader2 size={16} className="animate-spin" /> Generating suggestions...</>
-                  ) : (
-                    <><Wand2 size={16} /> Get 3 AI Suggestions</>
-                  )}
-                </button>
-              </div>
-
-              {/* Suggestion carousel */}
-              {autoSuggestions.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-sm flex items-center gap-2">
-                      <Sparkles size={16} className="text-acid" />
-                      Pick your fav
-                    </h3>
-                    <span className="text-xs text-muted font-mono">
-                      {currentSuggestionIdx + 1} / {autoSuggestions.length}
-                    </span>
-                  </div>
-
-                  <div className="relative">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={currentSuggestionIdx}
-                        initial={{ opacity: 0, x: 60 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -60 }}
-                        transition={{ duration: 0.25 }}
-                        className="glass-card border border-border rounded-xl overflow-hidden"
-                      >
-                        <div className="aspect-video bg-surface overflow-hidden">
-                          <img
-                            src={
-                              autoSuggestions[currentSuggestionIdx].template.image_url
-                              || autoSuggestions[currentSuggestionIdx].template.preview_image_url
-                            }
-                            alt={autoSuggestions[currentSuggestionIdx].template.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="p-5 space-y-4">
-                          <div>
-                            <p className="text-xs text-muted mb-1">Template</p>
-                            <p className="font-semibold">{autoSuggestions[currentSuggestionIdx].template.name}</p>
-                          </div>
-                          <div className="space-y-1.5">
-                            {autoSuggestions[currentSuggestionIdx].captions.map((c, i) => (
-                              <div key={i} className="flex items-start gap-2 p-2 bg-surface-2 rounded-lg">
-                                <span className="text-acid font-bold text-xs mt-0.5">{i + 1}.</span>
-                                <p className="text-sm">{c}</p>
-                              </div>
-                            ))}
-                          </div>
-                          {autoSuggestions[currentSuggestionIdx].reasoning && (
-                            <p className="text-xs text-muted italic border-l-2 border-acid/30 pl-3">
-                              {autoSuggestions[currentSuggestionIdx].reasoning}
-                            </p>
-                          )}
-                          <button
-                            onClick={() => switchToManualWithSuggestion(autoSuggestions[currentSuggestionIdx])}
-                            className="w-full btn-acid justify-center"
-                          >
-                            Use This & Tweak
-                          </button>
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-
-                    {autoSuggestions.length > 1 && (
-                      <>
-                        <button
-                          onClick={() => setCurrentSuggestionIdx((i) => (i - 1 + autoSuggestions.length) % autoSuggestions.length)}
-                          className="absolute left-2 top-[30%] -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full"
-                        >
-                          <ChevronLeft size={18} className="text-white" />
-                        </button>
-                        <button
-                          onClick={() => setCurrentSuggestionIdx((i) => (i + 1) % autoSuggestions.length)}
-                          className="absolute right-2 top-[30%] -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full"
-                        >
-                          <ChevronRight size={18} className="text-white" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── Manual Mode ─────────────────────────────────────────────────── */}
-          {mode === 'manual' && (
-            <motion.div
-              key="manual"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
-            >
-              {!selectedTemplate ? (
-                <div>
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <Edit3 size={16} className="text-acid" />
-                    Choose a Template
-                    <span className="badge-dim">{26} templates</span>
-                  </h3>
-                  <TemplateSelector
-                    onSelectTemplate={async (tpl) => {
-                      try {
-                        const data = await fetch(`/api/memes/templates/${tpl.id}`).then((r) => r.json());
-                        setSelectedTemplate(data);
-                        const fields: TextField[] = (data.text_coordinates || []).map(
-                          (coord: any, idx: number) => {
-                            const c = Array.isArray(coord)
-                              ? { x: coord[0] ?? 10, y: coord[1] ?? 10, maxWidth: coord[2] ?? 80, maxHeight: coord[3] ?? 20 }
-                              : coord;
-                            return {
-                              id: `text-${idx}`,
-                              text: '',
-                              color: '#FFFFFF',
-                              fontSize: 32,
-                              uppercase: false,
-                              stroke: true,
-                              autoResize: true,
-                              x: c.x, y: c.y, width: c.maxWidth ?? 80, height: c.maxHeight ?? 20,
-                            };
-                          },
-                        );
-                        setTextFields(fields);
-                      } catch { toast.error('Failed to load template'); }
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Editor */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Edit3 size={15} className="text-acid" />
-                        Edit Text
-                      </h3>
-                      <button
-                        onClick={() => { setSelectedTemplate(null); setTextFields([]); }}
-                        className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors"
-                      >
-                        <X size={12} /> Change template
-                      </button>
-                    </div>
-                    <MemeEditor texts={textFields} onTextUpdate={handleTextUpdate} onStyleUpdate={handleStyleUpdate} />
-                    <button
-                      onClick={handleGenerateMeme}
-                      disabled={isGenerating}
-                      className="w-full btn-acid justify-center py-3"
-                    >
-                      {isGenerating ? (
-                        <><Loader2 size={16} className="animate-spin" /> Generating...</>
-                      ) : (
-                        <><Wand2 size={16} /> Generate Meme</>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Preview */}
-                  <div>
-                    <h3 className="font-semibold mb-4 text-sm">Live Preview</h3>
-                    <MemePreview
-                      templateImageUrl={selectedTemplate.image_url || selectedTemplate.preview_image_url || ''}
-                      texts={textFields}
-                      onTextPositionUpdate={handleTextPositionUpdate}
-                      isLocked={false}
-                      canvasWidth={canvasSize.width}
-                      canvasHeight={canvasSize.height}
-                    />
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Results ───────────────────────────────────────────────────────── */}
-        {memes.length > 0 && (
-          <div className="space-y-4 mt-8">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-lg">Your Memes</h2>
               <button
-                onClick={() => setMemes([])}
-                className="flex items-center gap-1.5 text-xs text-muted hover:text-red-400 transition-colors"
+                onClick={loadSuggestions}
+                disabled={isLoadingSuggestions || !prompt.trim()}
+                className="w-full btn-acid justify-center py-3 disabled:opacity-50"
               >
-                <RefreshCw size={12} /> Clear all
+                {isLoadingSuggestions ? (
+                  <><Loader2 size={16} className="animate-spin" /> Generating suggestions...</>
+                ) : (
+                  <><Wand2 size={16} /> Get 3 AI Suggestions</>
+                )}
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {memes.map((meme, i) => (
-                <motion.div
-                  key={meme.id}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06, duration: 0.4 }}
-                >
-                  <MemeCard meme={meme} priority={i < 3} />
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* ── Sidebar ───────────────────────────────────────────────────────── */}
-      <div className="lg:col-span-1">
-        <div className="sticky top-6 space-y-4">
-          <p className="text-xs font-mono uppercase tracking-widest text-muted">Trending Now</p>
-          <TrendingTopics onTopicSelect={handleTrendingTopicSelect} maxItems={6} variant="sidebar" />
+            {/* Suggestion carousel */}
+            {autoSuggestions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                    <Sparkles size={16} className="text-acid" />
+                    Pick your fav
+                  </h3>
+                  <span className="text-xs text-muted font-mono">
+                    {currentSuggestionIdx + 1} / {autoSuggestions.length}
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentSuggestionIdx}
+                      initial={{ opacity: 0, x: 60 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -60 }}
+                      transition={{ duration: 0.25 }}
+                      className="glass-card border border-border rounded-xl overflow-hidden"
+                    >
+                      <div className="aspect-video bg-surface overflow-hidden">
+                        <img
+                          src={
+                            autoSuggestions[currentSuggestionIdx].template.image_url
+                            || autoSuggestions[currentSuggestionIdx].template.preview_image_url
+                          }
+                          alt={autoSuggestions[currentSuggestionIdx].template.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-5 space-y-4">
+                        <div>
+                          <p className="text-xs text-muted mb-1">Template</p>
+                          <p className="font-semibold">{autoSuggestions[currentSuggestionIdx].template.name}</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          {autoSuggestions[currentSuggestionIdx].captions.map((c, i) => (
+                            <div key={i} className="flex items-start gap-2 p-2 bg-surface-2 rounded-lg">
+                              <span className="text-acid font-bold text-xs mt-0.5">{i + 1}.</span>
+                              <p className="text-sm">{c}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {autoSuggestions[currentSuggestionIdx].reasoning && (
+                          <p className="text-xs text-muted italic border-l-2 border-acid/30 pl-3">
+                            {autoSuggestions[currentSuggestionIdx].reasoning}
+                          </p>
+                        )}
+                        <button
+                          onClick={() => switchToManualWithSuggestion(autoSuggestions[currentSuggestionIdx])}
+                          className="w-full btn-acid justify-center"
+                        >
+                          Use This & Tweak
+                        </button>
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {autoSuggestions.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => setCurrentSuggestionIdx((i) => (i - 1 + autoSuggestions.length) % autoSuggestions.length)}
+                        className="absolute left-2 top-[30%] -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full"
+                      >
+                        <ChevronLeft size={18} className="text-white" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentSuggestionIdx((i) => (i + 1) % autoSuggestions.length)}
+                        className="absolute right-2 top-[30%] -translate-y-1/2 p-2 bg-black/60 hover:bg-black/80 rounded-full"
+                      >
+                        <ChevronRight size={18} className="text-white" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* ── Manual Mode ─────────────────────────────────────────────────── */}
+        {mode === 'manual' && (
+          <motion.div
+            key="manual"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            {!selectedTemplate ? (
+              <div>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <Edit3 size={16} className="text-acid" />
+                  Choose a Template
+                  <span className="badge-dim">{26} templates</span>
+                </h3>
+                <TemplateSelector
+                  onSelectTemplate={async (tpl) => {
+                    try {
+                      const data = await fetch(`/api/memes/templates/${tpl.id}`).then((r) => r.json());
+                      setSelectedTemplate(data);
+                      const fields: TextField[] = (data.text_coordinates || []).map(
+                        (coord: any, idx: number) => {
+                          const c = Array.isArray(coord)
+                            ? { x: coord[0] ?? 10, y: coord[1] ?? 10, maxWidth: coord[2] ?? 80, maxHeight: coord[3] ?? 20 }
+                            : coord;
+                          return {
+                            id: `text-${idx}`,
+                            text: '',
+                            color: '#FFFFFF',
+                            fontSize: 32,
+                            uppercase: false,
+                            stroke: true,
+                            autoResize: true,
+                            x: c.x, y: c.y, width: c.maxWidth ?? 80, height: c.maxHeight ?? 20,
+                          };
+                        },
+                      );
+                      setTextFields(fields);
+                    } catch { toast.error('Failed to load template'); }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Editor */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Edit3 size={15} className="text-acid" />
+                      Edit Text
+                    </h3>
+                    <button
+                      onClick={() => { setSelectedTemplate(null); setTextFields([]); }}
+                      className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors"
+                    >
+                      <X size={12} /> Change template
+                    </button>
+                  </div>
+                  <MemeEditor texts={textFields} onTextUpdate={handleTextUpdate} onStyleUpdate={handleStyleUpdate} />
+                  <button
+                    onClick={handleGenerateMeme}
+                    disabled={isGenerating}
+                    className="w-full btn-acid justify-center py-3"
+                  >
+                    {isGenerating ? (
+                      <><Loader2 size={16} className="animate-spin" /> Generating...</>
+                    ) : (
+                      <><Wand2 size={16} /> Generate Meme</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <h3 className="font-semibold mb-4 text-sm">Live Preview</h3>
+                  <MemePreview
+                    templateImageUrl={selectedTemplate.image_url || selectedTemplate.preview_image_url || ''}
+                    texts={textFields}
+                    onTextPositionUpdate={handleTextPositionUpdate}
+                    isLocked={false}
+                    canvasWidth={canvasSize.width}
+                    canvasHeight={canvasSize.height}
+                  />
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Results ───────────────────────────────────────────────────────── */}
+      {memes.length > 0 && (
+        <div className="space-y-4 mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-lg">Your Memes</h2>
+            <button
+              onClick={() => setMemes([])}
+              className="flex items-center gap-1.5 text-xs text-muted hover:text-red-400 transition-colors"
+            >
+              <RefreshCw size={12} /> Clear all
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {memes.map((meme, i) => (
+              <motion.div
+                key={meme.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
+              >
+                <MemeCard meme={meme} priority={i < 3} />
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
+
   );
 }
