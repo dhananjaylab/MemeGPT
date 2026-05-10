@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     
     # Redis
     redis_url: str = "redis://localhost:6379"
+    arq_redis_settings: str = Field(default="", alias="ARQ_REDIS_SETTINGS")
     arq_queue_name: str = Field(default="arq:queue", alias="ARQ_QUEUE_NAME")
     
     # OpenAI
@@ -77,6 +78,10 @@ class Settings(BaseSettings):
     @property
     def r2_secret_key(self) -> str:
         return self.r2_secret_access_key
+
+    @property
+    def arq_redis_url(self) -> str:
+        return self.arq_redis_settings or self.redis_url
 
     model_config = ConfigDict(
         env_file=".env",

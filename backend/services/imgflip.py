@@ -173,6 +173,7 @@ class ImgflipService:
                 "fetched": len(imgflip_templates),
                 "created": 0,
                 "updated": 0,
+                "skipped": 0,
                 "errors": 0
             }
             
@@ -185,17 +186,31 @@ class ImgflipService:
                     url = template_data.get("url", "")
                     box_count = template_data.get("box_count", 2)
                     
-                    # Check if template already exists (by ID or name)
+                    # Check if template already exists by Imgflip ID first.
+                    # Name collisions with curated local/database templates should
+                    # not relabel or overwrite those records.
                     from sqlalchemy import or_
                     result = await db.execute(
                         select(MemeTemplate).where(
                             or_(
                                 MemeTemplate.imgflip_id == imgflip_id,
-                                MemeTemplate.name == name
+                                and_(
+                                    MemeTemplate.name == name,
+                                    MemeTemplate.source == "imgflip",
+                                )
                             )
                         )
                     )
                     existing_template = result.scalar_one_or_none()
+
+                    if not existing_template:
+                        result = await db.execute(
+                            select(MemeTemplate).where(MemeTemplate.name == name)
+                        )
+                        name_collision = result.scalar_one_or_none()
+                        if name_collision:
+                            stats["skipped"] += 1
+                            continue
                     
                     # Generate text coordinates
                     text_coords = ImgflipService.generate_text_coordinates(box_count)
@@ -205,6 +220,9 @@ class ImgflipService:
                         existing_template.name = name
                         existing_template.image_url = url
                         existing_template.preview_image_url = url
+                        existing_template.fallback_url = url
+                        existing_template.source = "imgflip"
+                        existing_template.imgflip_id = imgflip_id
                         existing_template.box_count = box_count
                         existing_template.number_of_text_fields = box_count
                         existing_template.text_coordinates = text_coords

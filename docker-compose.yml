@@ -111,11 +111,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./templates:/app/templates:ro
-      - ./fonts:/app/fonts:ro
-      - ./meme_data.json:/app/meme_data.json:ro
       - ./backend:/app/backend
-      - ./output:/app/output
+      - ./backend/public/output:/app/backend/public/output
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,7 +145,7 @@ services:
         - BUILDKIT_INLINE_CACHE=1
     container_name: memegpt-worker
     restart: unless-stopped
-    command: python -m arq backend.workers.meme_worker.settings --burst
+    command: python -m arq backend.workers.meme_worker.WorkerSettings --burst
     environment:
       # Database
       - DATABASE_URL=postgresql+asyncpg://memegpt:${DB_PASSWORD:-password}@postgres:5432/memegpt
@@ -168,11 +165,8 @@ services:
       - SENTRY_DSN=${SENTRY_DSN}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
-      - ./templates:/app/templates:ro
-      - ./fonts:/app/fonts:ro
-      - ./meme_data.json:/app/meme_data.json:ro
       - ./backend:/app/backend
-      - ./output:/app/output
+      - ./backend/public/output:/app/backend/public/output
     depends_on:
       postgres:
         condition: service_healthy

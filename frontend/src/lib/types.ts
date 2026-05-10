@@ -15,7 +15,7 @@ export interface MemeTemplate {
   preview_image_url?: string;
   image_url?: string;
   example_output?: string[];
-  source?: 'local' | 'imgflip';
+  source?: 'local' | 'database' | 'imgflip';
   imgflip_id?: string;
   box_count?: number;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Upload, RefreshCw, Database, Globe } from 'lucide-react';
+import { Search, Upload, RefreshCw, Database, Globe, HardDrive } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 
@@ -12,7 +12,7 @@ export interface Template {
   preview_image_url?: string;
   font_path: string;
   usage_instructions?: string;
-  source?: 'local' | 'imgflip';
+  source?: 'local' | 'database' | 'imgflip';
   imgflip_id?: string;
 }
 
@@ -28,7 +28,7 @@ export function TemplateSelector({
   const [templates, setTemplates] = useState<Template[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'imgflip'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'database' | 'imgflip'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +84,9 @@ export function TemplateSelector({
       }
       
       const data = await response.json();
-      toast.success(`Synced ${data.stats.created + data.stats.updated} templates from Imgflip!`);
+      const changed = data.stats.created + data.stats.updated;
+      const skipped = data.stats.skipped ? ` (${data.stats.skipped} curated duplicates skipped)` : '';
+      toast.success(`Synced ${changed} templates from Imgflip${skipped}!`);
       
       // Refresh templates
       await fetchTemplates(sourceFilter);
@@ -101,7 +103,7 @@ export function TemplateSelector({
         <h3 className="text-lg font-semibold mb-4">Meme Templates</h3>
 
         {/* Source Filter Tabs */}
-        <div className="flex gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
           <button
             onClick={() => setSourceFilter('all')}
             className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -114,8 +116,19 @@ export function TemplateSelector({
           </button>
           <button
             onClick={() => setSourceFilter('local')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
               sourceFilter === 'local'
+                ? 'bg-acid text-black'
+                : 'bg-surface-2 text-secondary hover:text-primary'
+            }`}
+          >
+            <HardDrive size={14} />
+            Local
+          </button>
+          <button
+            onClick={() => setSourceFilter('database')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              sourceFilter === 'database'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
             }`}
@@ -125,7 +138,7 @@ export function TemplateSelector({
           </button>
           <button
             onClick={() => setSourceFilter('imgflip')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
               sourceFilter === 'imgflip'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
@@ -248,9 +261,14 @@ export function TemplateSelector({
                         <Globe size={10} />
                         Imgflip
                       </div>
+                    ) : template.source === 'database' ? (
+                      <div className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm rounded text-[10px] font-semibold text-white flex items-center gap-1">
+                        <Database size={10} />
+                        Database
+                      </div>
                     ) : (
                       <div className="px-2 py-1 bg-purple-500/90 backdrop-blur-sm rounded text-[10px] font-semibold text-white flex items-center gap-1">
-                        <Database size={10} />
+                        <HardDrive size={10} />
                         Local
                       </div>
                     )}

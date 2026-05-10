@@ -97,7 +97,7 @@ pip check
 
 # Update dependencies
 npm update
-pip install --upgrade -r requirements.txt
+backend/venv/Scripts/python -m pip install --upgrade -r backend/requirements.txt
 ```
 
 ## Monthly Maintenance
@@ -370,7 +370,7 @@ manager.restore_from_backup("20240401_120000")
 ### Dependency Updates
 ```bash
 # Backend
-pip install --upgrade -r backend/requirements.txt
+backend/venv/Scripts/python -m pip install --upgrade -r backend/requirements.txt
 
 # Frontend
 cd frontend && npm update

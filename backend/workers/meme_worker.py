@@ -262,7 +262,7 @@ async def process_meme_generation(
 
 class WorkerSettings:
     functions = [process_meme_generation]
-    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
     queue_name = settings.arq_queue_name
     max_jobs = 10          # allow more concurrent jobs
     job_timeout = 120      # 2-minute hard cap per job

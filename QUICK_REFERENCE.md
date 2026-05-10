@@ -57,8 +57,8 @@
 
 ### Test AI Suggestions
 ```bash
+backend/venv/Scripts/activate
 cd backend
-./venv/Scripts/activate
 python scratch/test_ai_suggest.py
 ```
 

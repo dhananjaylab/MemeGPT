@@ -12,6 +12,34 @@ dist
 dist-ssr
 *.local
 
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Framework/build caches
+.next
+out
+build
+coverage
+*.lcov
+.nyc_output
+jspm_packages
+.npm
+.cache
+.parcel-cache
+.nuxt
+.vuepress/dist
+.serverless
+.fusebox
+.dynamodb
+.tern-port
+.node_repl_history
+*.tgz
+.yarn-integrity
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

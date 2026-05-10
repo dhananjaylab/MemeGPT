@@ -81,14 +81,14 @@ Before you begin, ensure you have the following installed:
 git clone https://github.com/your-repo/MemeGPT.git
 cd MemeGPT
 
-# Create Python virtual environment
-python -m venv venv
+# Create Python virtual environment for the backend
+python -m venv backend/venv
 
 # Activate virtual environment
 # On Windows:
-venv\Scripts\activate
+backend\venv\Scripts\activate
 # On macOS/Linux:
-source venv/bin/activate
+source backend/venv/bin/activate
 
 # Install backend dependencies
 cd backend
@@ -97,7 +97,7 @@ pip install -r requirements.txt
 
 #### 2. Setup Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the `backend` directory:
 
 ```env
 # ─── Database Configuration ───
@@ -175,7 +175,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 2: Start ARQ worker
 cd backend
-python -m arq workers.main
+python -m arq workers.meme_worker.WorkerSettings
 ```
 
 #### 6. Setup and Run Frontend

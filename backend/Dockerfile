@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/backend:/app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,12 +22,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY backend/ ./backend/
-COPY templates/ ./templates/
-COPY fonts/ ./fonts/
-COPY meme_data.json ./
 
 # Create output directory
-RUN mkdir -p /app/output
+RUN mkdir -p /app/backend/public/output
 
 # Expose port
 EXPOSE 8000
