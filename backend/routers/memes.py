@@ -37,6 +37,7 @@ from services.compositor import overlay_text_on_image_async
 from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator
 from services.storage import upload_to_r2
+from services.template_catalog import build_template_fields
 from services.worker import enqueue_meme_generation
 
 logger = logging.getLogger(__name__)
@@ -488,7 +489,10 @@ async def get_templates(
     try:
         query = select(MemeTemplate)
         if source and source != "all":
+            if source not in {"local", "database", "imgflip"}:
+                raise HTTPException(status_code=400, detail="source must be local, database, imgflip, or all")
             query = query.where(MemeTemplate.source == source)
+        query = query.order_by(MemeTemplate.id)
 
         result = await db.execute(query)
         templates = result.scalars().all()
@@ -497,10 +501,10 @@ async def get_templates(
             TemplateResponse(
                 id=t.id,
                 name=t.name,
-                image_url=t.image_url,
+                image_url=t.effective_image_url,
                 text_field_count=t.number_of_text_fields,
                 text_coordinates=t.text_coordinates or t.text_coordinates_xy_wh,
-                preview_image_url=t.preview_image_url or t.image_url,
+                preview_image_url=t.preview_image_url or t.effective_image_url,
                 font_path=t.font_path,
                 usage_instructions=t.usage_instructions,
                 source=t.source,
@@ -535,10 +539,10 @@ async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
     return TemplateResponse(
         id=t.id,
         name=t.name,
-        image_url=t.image_url,
+        image_url=t.effective_image_url,
         text_field_count=t.number_of_text_fields,
         text_coordinates=t.text_coordinates or t.text_coordinates_xy_wh,
-        preview_image_url=t.preview_image_url or t.image_url,
+        preview_image_url=t.preview_image_url or t.effective_image_url,
         font_path=t.font_path,
         usage_instructions=t.usage_instructions,
         source=t.source,
@@ -649,7 +653,6 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
     with open(meme_data_path, encoding="utf-8") as f:
         templates_data = json.load(f)
 
-    frames_dir = meme_data_path.parent / "frames"
     added = updated = 0
 
     for td in templates_data:
@@ -657,30 +660,7 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
         result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == tid))
         existing = result.scalar_one_or_none()
 
-        local_file = frames_dir / td["file_path"]
-        
-        # Skip templates without local files
-        if not local_file.exists():
-            continue
-        
-        image_url = f"/frames/{td['file_path']}"
-
-        fields = {
-            "name": td["name"],
-            "alternative_names": td.get("alternative_names", []),
-            "file_path": td["file_path"],
-            "font_path": td["font_path"],
-            "text_color": td["text_color"],
-            "text_stroke": td.get("text_stroke", True),
-            "usage_instructions": td["usage_instructions"],
-            "number_of_text_fields": td["number_of_text_fields"],
-            "text_coordinates_xy_wh": td["text_coordinates_xy_wh"],
-            "text_coordinates": td["text_coordinates_xy_wh"],
-            "example_output": td["example_output"],
-            "image_url": image_url,
-            "preview_image_url": image_url,
-            "source": "local",
-        }
+        fields = build_template_fields(td)
 
         if existing:
             for k, v in fields.items():
@@ -692,4 +672,3 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"message": "Templates seeded", "added": added, "updated": updated, "total": added + updated}
-

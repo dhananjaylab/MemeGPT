@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from models.models import MemeTemplate, Base
 from core.config import settings
+from services.template_catalog import build_template_fields
 
 
 async def seed_templates():
@@ -63,45 +64,17 @@ async def seed_templates():
                 )
                 existing_template = result.scalar_one_or_none()
                 
-                # Prepare image URL
-                file_name = template_data['file_path']
-                image_url = f"{settings.r2_public_url}/templates/{file_name}"
+                fields = build_template_fields(template_data)
                 
                 if existing_template:
                     # Update
-                    existing_template.name = template_data['name']
-                    existing_template.alternative_names = template_data.get('alternative_names', [])
-                    existing_template.file_path = template_data['file_path']
-                    existing_template.font_path = template_data['font_path']
-                    existing_template.text_color = template_data['text_color']
-                    existing_template.text_stroke = template_data.get('text_stroke', False)
-                    existing_template.usage_instructions = template_data['usage_instructions']
-                    existing_template.number_of_text_fields = template_data['number_of_text_fields']
-                    existing_template.text_coordinates_xy_wh = template_data['text_coordinates_xy_wh']
-                    existing_template.text_coordinates = template_data['text_coordinates_xy_wh']
-                    existing_template.example_output = template_data['example_output']
-                    existing_template.image_url = image_url
-                    existing_template.preview_image_url = image_url
+                    for key, value in fields.items():
+                        setattr(existing_template, key, value)
                     updated += 1
                     print(f"  ✏️  Updated: {template_data['name']}")
                 else:
                     # Create new
-                    template = MemeTemplate(
-                        id=template_id,
-                        name=template_data['name'],
-                        alternative_names=template_data.get('alternative_names', []),
-                        file_path=template_data['file_path'],
-                        font_path=template_data['font_path'],
-                        text_color=template_data['text_color'],
-                        text_stroke=template_data.get('text_stroke', False),
-                        usage_instructions=template_data['usage_instructions'],
-                        number_of_text_fields=template_data['number_of_text_fields'],
-                        text_coordinates_xy_wh=template_data['text_coordinates_xy_wh'],
-                        text_coordinates=template_data['text_coordinates_xy_wh'],
-                        example_output=template_data['example_output'],
-                        image_url=image_url,
-                        preview_image_url=image_url
-                    )
+                    template = MemeTemplate(id=template_id, **fields)
                     session.add(template)
                     added += 1
                     print(f"  ➕ Added: {template_data['name']}")

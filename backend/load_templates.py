@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db.session import _init_engine, engine
 from models.models import MemeTemplate
+from services.template_catalog import build_template_fields
 
 
 async def load_templates():
@@ -43,7 +44,6 @@ async def load_templates():
             # Check existing templates
             result = await db.execute(select(MemeTemplate))
             existing_templates = result.scalars().all()
-            existing_ids = {t.id for t in existing_templates}
             
             print(f"📊 Found {len(existing_templates)} existing templates in database")
             
@@ -59,47 +59,17 @@ async def load_templates():
                 )
                 existing = result.scalar_one_or_none()
                 
+                fields = build_template_fields(template_data)
+
                 if existing:
                     # Update existing template
-                    existing.name = template_data['name']
-                    existing.alternative_names = template_data.get('alternative_names', [])
-                    existing.file_path = template_data['file_path']
-                    existing.font_path = template_data['font_path']
-                    existing.text_color = template_data['text_color']
-                    existing.text_stroke = template_data.get('text_stroke', False)
-                    existing.usage_instructions = template_data['usage_instructions']
-                    existing.number_of_text_fields = template_data['number_of_text_fields']
-                    existing.text_coordinates_xy_wh = template_data['text_coordinates_xy_wh']
-                    existing.example_output = template_data['example_output']
-                    
-                    # Set image URLs (assuming R2 public URL structure)
-                    file_name = template_data['file_path']
-                    existing.image_url = f"https://pub-85d20eba57fa4492b8ee36240e8c5b22.r2.dev/templates/{file_name}"
-                    existing.preview_image_url = existing.image_url
-                    
+                    for key, value in fields.items():
+                        setattr(existing, key, value)
                     updated += 1
                     print(f"  ✏️  Updated: {template_data['name']}")
                 else:
                     # Create new template
-                    file_name = template_data['file_path']
-                    image_url = f"https://pub-85d20eba57fa4492b8ee36240e8c5b22.r2.dev/templates/{file_name}"
-                    
-                    template = MemeTemplate(
-                        id=template_id,
-                        name=template_data['name'],
-                        alternative_names=template_data.get('alternative_names', []),
-                        file_path=template_data['file_path'],
-                        font_path=template_data['font_path'],
-                        text_color=template_data['text_color'],
-                        text_stroke=template_data.get('text_stroke', False),
-                        usage_instructions=template_data['usage_instructions'],
-                        number_of_text_fields=template_data['number_of_text_fields'],
-                        text_coordinates_xy_wh=template_data['text_coordinates_xy_wh'],
-                        text_coordinates=template_data['text_coordinates_xy_wh'],  # Same as xy_wh
-                        example_output=template_data['example_output'],
-                        image_url=image_url,
-                        preview_image_url=image_url
-                    )
+                    template = MemeTemplate(id=template_id, **fields)
                     db.add(template)
                     added += 1
                     print(f"  ➕ Added: {template_data['name']}")
