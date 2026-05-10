@@ -182,13 +182,13 @@ SET imgflip_id = '110163934',
 WHERE id = 19;
 
 -- It's A Trap
-UPDATE meme_templates 
-SET imgflip_id = '5677926',
-    image_url = 'https://i.imgflip.com/1jgig.jpg',
-    preview_image_url = 'https://i.imgflip.com/1jgig.jpg',
-    source = 'imgflip',
-    box_count = 2
-WHERE id = 20;
+-- UPDATE meme_templates 
+-- SET imgflip_id = '5677926',
+--     image_url = 'https://i.imgflip.com/1jgig.jpg',
+--     preview_image_url = 'https://i.imgflip.com/1jgig.jpg',
+--     source = 'imgflip',
+--     box_count = 2
+-- WHERE id = 20;
 
 -- Mocking SpongeBob
 UPDATE meme_templates 

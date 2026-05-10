@@ -25,7 +25,7 @@ TEMPLATE_UPDATES = [
     (17, '178591752', 'https://i.imgflip.com/3qqcml.jpg'),
     (18, '196652226', 'https://i.imgflip.com/3bb4c7.jpg'),
     (19, '110163934', 'https://i.imgflip.com/1o00in.jpg'),
-    (20, '5677926', 'https://i.imgflip.com/1jgig.jpg'),
+    # (20, '5677926', 'https://i.imgflip.com/1jgig.jpg'),
     (21, '102156234', 'https://i.imgflip.com/1otk96.jpg'),
     (22, '100947', 'https://i.imgflip.com/9ehk.jpg'),
     (23, '129242436', 'https://i.imgflip.com/24y43o.jpg'),

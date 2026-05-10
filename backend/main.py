@@ -58,12 +58,12 @@ async def seed_templates_if_needed() -> None:
                 tid = td["id"]
                 local_file = frames_dir / td["file_path"]
 
-                if local_file.exists():
-                    image_url = f"/frames/{td['file_path']}"
-                elif td.get("fallback_url"):
-                    image_url = f"/api/memes/proxy-image?url={td['fallback_url']}"
-                else:
-                    image_url = None
+                # Only add templates that have local files
+                if not local_file.exists():
+                    print(f"[SKIP] Template {tid} ({td['name']}) - local file not found: {td['file_path']}")
+                    continue
+                
+                image_url = f"/frames/{td['file_path']}"
 
                 db.add(MemeTemplate(
                     id=tid,

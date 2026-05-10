@@ -201,7 +201,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/26jxvz.jpg",
     "usage_instructions": "The 'This Is Fine' meme features a dog sitting calmly while surrounded by fire, sipping coffee. It is used to depict situations where someone is in denial about a clearly disastrous situation. The first sentence describes the chaotic or terrible situation in the background, and the second sentence is always the phrase 'This is fine.' or a variation.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -221,7 +220,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/3oevdk.jpg",
     "usage_instructions": "The Surprised Pikachu meme features Pikachu with a shocked open-mouth expression. It is used for situations where an obvious consequence of an action surprises someone. The first sentence describes a predictable action or behavior, and the second sentence describes the shockingly obvious consequence — implying the surprise was unwarranted.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -241,7 +239,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/345v97.jpg",
     "usage_instructions": "The Woman Yelling at Cat meme features an angry woman at a dinner table on the left and a confused/smug white cat on the right. It depicts arguments, contradictions, or two opposing viewpoints. The first sentence is what the person/group on the left (the yeller) is upset about, and the second sentence is the calm, sarcastic, or logical rebuttal from the right (the cat).",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -261,7 +258,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/1g8in9.jpg",
     "usage_instructions": "The Two Buttons meme features a panicking person struggling to choose between two buttons. It represents situations of difficult or comically trivial choices. The first two sentences label each of the two buttons (both options are usually bad, ironic, or equally tempting), and the third sentence identifies who is sweating — typically 'Me' or a group.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
@@ -283,7 +279,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/46e43q.jpg",
     "usage_instructions": "The Always Has Been meme features two astronauts in space — one pointing a gun at the other. The first astronaut says 'Wait, it's all [X]?' with a shocked realization, and the second astronaut says 'Always has been.' while pointing a gun. Great for revealing that something was always obvious but people just noticed. Format: first sentence is the shocked realization starting with 'Wait, it's all', second sentence is always 'Always has been.'",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -303,7 +298,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/26am.jpg",
     "usage_instructions": "The Gru's Plan meme features Gru from Despicable Me reading a 4-step plan. Steps 1, 2, and 3 are logical, but step 4 repeats step 3 as if Gru didn't realize it contradicts his plan. Use this to show plans that fall apart at the end. Provide 4 sentences: the first two are the setup/plan steps, the third is the unexpected or ironic result, and the fourth REPEATS the third sentence exactly.",
     "number_of_text_fields": 4,
     "text_coordinates_xy_wh": [
@@ -327,7 +321,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/3qqcml.jpg",
     "usage_instructions": "The Panik Kalm Panik meme shows three panels: PANIK (panic), KALM (calm), and PANIK (panic again). The first sentence is the initial scary situation causing panic. The second sentence is the reassuring thought that causes calm. The third sentence is the worse realization that brings back even bigger panic. Great for escalating anxiety moments.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
@@ -349,7 +342,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/3bb4c7.jpg",
     "usage_instructions": "The Nobody / Absolutely Nobody meme format is used for behaviors that are completely unprompted and random. The first line is always 'Nobody:' and the second is 'Absolutely nobody:' and the third describes the absurd, unsolicited, or extra thing someone or something does. It mocks unnecessary or over-the-top behavior. Keep the third sentence punchy and relatable.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
@@ -371,7 +363,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/1o00in.jpg",
     "usage_instructions": "The Me Explaining to My Mom meme features someone enthusiastically explaining something while a parent looks unimpressed or confused. The first sentence is the thing being explained (usually complex, niche, or internet-related), and the second sentence is the parent's confused, dismissive, or concerned response. Great for generational communication gaps and niche interests.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -391,7 +382,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/1jgig.jpg",
     "usage_instructions": "The It's A Trap meme features Admiral Ackbar from Star Wars saying 'It's a trap!' Used to warn about situations that appear appealing but are obviously or humorously dangerous, manipulative, or problematic. The first sentence describes the tempting situation, and the second sentence is always 'It's a trap!' or a creative variation.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -411,7 +401,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/1otk96.jpg",
     "usage_instructions": "The Mocking SpongeBob meme features SpongeBob mimicking something in a mocking way — often shown with alternating uppercase and lowercase letters to indicate sarcasm. The first sentence is the normal, sincere version of what someone says. The second sentence repeats it in a mocking, sarcastic way (often with weird capitalization like 'i cAn'T HaNdLe aDuLtInG'). Use this to mock clichés, overused phrases, or hypocritical statements.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -431,7 +420,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/9ehk.jpg",
     "usage_instructions": "The Bike Fall meme features a person sticking something into the spokes of their own bicycle wheel, causing them to crash. It represents self-sabotage or situations where someone causes their own downfall. The first sentence is the person on the bike (who is doing fine). The second sentence is the stick/sabotage being inserted. The third sentence is what falls or suffers as a result.",
     "number_of_text_fields": 3,
     "text_coordinates_xy_wh": [
@@ -453,7 +441,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/24y43o.jpg",
     "usage_instructions": "The Change My Mind meme features Steven Crowder sitting at a table with a sign. Use it for bold, controversial, or hilariously trivial opinions that the speaker is willing to defend. The first sentence should be the hot take or bold opinion written on the sign. Keep it punchy, confident, and slightly outrageous. One sentence only.",
     "number_of_text_fields": 1,
     "text_coordinates_xy_wh": [
@@ -469,7 +456,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/kx0jh.jpg",
     "usage_instructions": "The Ancient Aliens meme features Giorgio Tsoukalos from the TV show Ancient Aliens, used to humorously attribute anything confusing or mysterious to aliens or conspiracy. The first sentence poses a question or describes something mysterious/confusing. The second sentence delivers the absurd 'aliens' explanation. Use for anything unexplained, irrational, or that defies logic in a funny way.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [
@@ -489,7 +475,6 @@
     "font_path": "impact.ttf",
     "text_color": "white",
     "text_stroke": true,
-    "fallback_url": "https://i.imgflip.com/6gg7y9.jpg",
     "usage_instructions": "The Coffin Dance meme features the famous Ghanaian dancing pallbearers who carry coffins with enthusiastic dancing. It is used to represent anything that gets 'buried' — failure, a plan gone wrong, hopes, etc. The first sentence describes the person or thing being metaphorically 'carried to their grave', and the second sentence describes the absurd or trivial cause of their downfall.",
     "number_of_text_fields": 2,
     "text_coordinates_xy_wh": [

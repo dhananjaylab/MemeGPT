@@ -658,11 +658,12 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
         existing = result.scalar_one_or_none()
 
         local_file = frames_dir / td["file_path"]
-        if local_file.exists():
-            image_url = f"/frames/{td['file_path']}"
-        else:
-            fallback = td.get("fallback_url", "https://i.imgflip.com/30b1gx.jpg")
-            image_url = f"/api/memes/proxy-image?url={fallback}"
+        
+        # Skip templates without local files
+        if not local_file.exists():
+            continue
+        
+        image_url = f"/frames/{td['file_path']}"
 
         fields = {
             "name": td["name"],
