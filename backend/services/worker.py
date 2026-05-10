@@ -14,7 +14,7 @@ from models.models import MemeJob, GeneratedMeme, User
 logger = logging.getLogger(__name__)
 
 # Redis settings for ARQ
-redis_settings = RedisSettings.from_dsn(settings.redis_url)
+redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
 
 # Global ARQ pool for reuse
 _arq_pool: Optional[ArqRedis] = None

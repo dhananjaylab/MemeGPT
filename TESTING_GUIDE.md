@@ -10,9 +10,9 @@ uvicorn main:app --reload
 
 **Expected Output:**
 ```
-✅ Mounted /frames → a:/MemeGPT/public/frames
-✅ Mounted /fonts → a:/MemeGPT/public/fonts
-✅ Mounted /static → a:/MemeGPT/public
+✅ Mounted /frames → a:/MemeGPT/backend/public/frames
+✅ Mounted /fonts → a:/MemeGPT/backend/public/fonts
+✅ Mounted /static → a:/MemeGPT/backend/public
 ✅ Found 11 existing templates in database
 ```
 
@@ -250,13 +250,13 @@ npm run test:e2e
 **Check:**
 1. Backend is running on port 8000
 2. Frontend proxy is configured correctly
-3. `public/frames/` directory exists
-4. Template files are in `public/frames/`
+3. `backend/public/frames/` directory exists
+4. Template files are in `backend/public/frames/`
 
 **Solution:**
 ```bash
 # Verify files exist
-ls public/frames/
+ls backend/public/frames/
 
 # Check backend logs for mount messages
 # Should see: "✅ Mounted /frames"
@@ -280,7 +280,7 @@ curl -I http://localhost:8000/api/memes/proxy-image?url=https://i.imgflip.com/30
 ### Issue: Templates not seeding
 **Check:**
 1. Database connection is working
-2. `public/meme_data.json` exists
+2. `backend/public/meme_data.json` exists
 3. Check backend logs
 
 **Solution:**

@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw, ImageFont
 logger = logging.getLogger(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-ROOT_DIRECTORY  = Path(__file__).resolve().parent.parent.parent
+ROOT_DIRECTORY  = Path(__file__).resolve().parent.parent
 IMAGE_FOLDER    = ROOT_DIRECTORY / "public" / "frames"
 FONT_FOLDER     = ROOT_DIRECTORY / "public" / "fonts"
 OUTPUT_FOLDER   = ROOT_DIRECTORY / "public" / "output"
@@ -88,7 +88,7 @@ async def _load_template_image(
 
     Priority:
       1. Remote URL if available (downloaded + cached via Redis)
-      2. Local file in public/frames/ as fallback
+      2. Local file in backend/public/frames/ as fallback
     This minimises dependency on local filesystem state.
     """
     # ── Try remote URL first (preferred for CDN-hosted templates) ────────────

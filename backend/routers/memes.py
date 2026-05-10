@@ -642,7 +642,7 @@ async def delete_meme(
 
 @router.post("/seed-templates")
 async def seed_templates(db: AsyncSession = Depends(get_db)):
-    meme_data_path = Path(__file__).parent.parent.parent / "public" / "meme_data.json"
+    meme_data_path = Path(__file__).parent.parent / "public" / "meme_data.json"
     if not meme_data_path.exists():
         raise HTTPException(status_code=500, detail="meme_data.json not found")
 
@@ -692,5 +692,4 @@ async def seed_templates(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"message": "Templates seeded", "added": added, "updated": updated, "total": added + updated}
-
 

@@ -11,7 +11,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
-from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health, ai
+from routers import memes, jobs, trending, auth, stripe as stripe_router, users, health, ai, storage
 from db.session import Base, get_db
 from models.models import MemeTemplate
 from core.config import settings
@@ -34,7 +34,7 @@ async def seed_templates_if_needed() -> None:
             result = await db.execute(select(MemeTemplate))
             existing = result.scalars().all()
 
-            meme_data_path = Path(__file__).parent.parent / "public" / "meme_data.json"
+            meme_data_path = Path(__file__).parent / "public" / "meme_data.json"
             if not meme_data_path.exists():
                 print("[WARNING] meme_data.json not found — skipping template seeding")
                 return
@@ -51,7 +51,7 @@ async def seed_templates_if_needed() -> None:
 
             print(f"[INFO] Seeding {len(missing)} new templates...")
 
-            frames_dir = Path(__file__).parent.parent / "public" / "frames"
+            frames_dir = Path(__file__).parent / "public" / "frames"
             added = 0
 
             for td in missing:
@@ -149,10 +149,11 @@ app.include_router(ai.router,            prefix="/api/ai",       tags=["ai"])
 app.include_router(stripe_router.router, prefix="/api/stripe",   tags=["billing"])
 app.include_router(users.router,         prefix="/api/auth",     tags=["users"])
 app.include_router(users.router,         prefix="/api/users",    tags=["users"])
+app.include_router(storage.router,       prefix="/api/storage",  tags=["storage"])
 
 # ── Static files ──────────────────────────────────────────────────────────────
 
-_root = Path(__file__).parent.parent
+_root = Path(__file__).parent
 
 for _name, _path in [
     ("frames", _root / "public" / "frames"),

@@ -33,7 +33,7 @@ async def seed_templates():
     )
     
     # Load meme data
-    meme_data_path = Path(__file__).parent.parent / "public" / "meme_data.json"
+    meme_data_path = Path(__file__).parent / "public" / "meme_data.json"
     
     if not meme_data_path.exists():
         print(f"❌ Error: meme_data.json not found at {meme_data_path}")

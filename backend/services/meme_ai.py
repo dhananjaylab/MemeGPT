@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent
+ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
 
 
 class AIProvider(str, Enum):
