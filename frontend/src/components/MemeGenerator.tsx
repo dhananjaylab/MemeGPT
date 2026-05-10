@@ -416,7 +416,7 @@ export function MemeGenerator({ topic }: MemeGeneratorProps) {
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <Edit3 size={16} className="text-acid" />
                   Choose a Template
-                  <span className="badge-dim">{26} templates</span>
+                  <span className="badge-dim">{21} templates</span>
                 </h3>
                 <TemplateSelector
                   onSelectTemplate={async (tpl) => {
