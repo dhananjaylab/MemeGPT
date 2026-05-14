@@ -65,3 +65,5 @@ temp/
 *.swp
 *.swo
 *~
+
+.vscode
