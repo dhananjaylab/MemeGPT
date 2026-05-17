@@ -13,6 +13,7 @@ Improvements over v1:
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import io
 import logging
 import textwrap
@@ -198,19 +199,15 @@ def _draw_text_box(
 
 # ── Public async interface ────────────────────────────────────────────────────
 
-async def overlay_text_on_image_async(
+executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _sync_overlay_text(
+    img: Image.Image,
     meme: Dict[str, Any],
     texts: List[str],
 ) -> Path:
-    """
-    Async version — downloads remote template images when needed.
-    Returns path to the newly created output PNG.
-    """
-    img = await _load_template_image(
-        meme["file_path"],
-        meme.get("image_url"),
-    )
-
+    """Pure synchronous function executing CPU-bound Pillow operations."""
     draw = ImageDraw.Draw(img)
 
     for bbox, text in zip(meme["text_coordinates_xy_wh"], texts):
@@ -226,6 +223,30 @@ async def overlay_text_on_image_async(
     out = _unique_output_path()
     img.save(out, format="PNG", optimize=True)
     return out
+
+
+async def overlay_text_on_image_async(
+    meme: Dict[str, Any],
+    texts: List[str],
+) -> Path:
+    """
+    Async version — downloads remote template images when needed.
+    Returns path to the newly created output PNG.
+    """
+    img = await _load_template_image(
+        meme["file_path"],
+        meme.get("image_url"),
+    )
+
+    loop = asyncio.get_running_loop()
+    # Execute the blocking CPU-bound PIL code in a thread
+    return await loop.run_in_executor(
+        executor,
+        _sync_overlay_text,
+        img,
+        meme,
+        texts,
+    )
 
 
 # ── Sync shim (for backward compat) ──────────────────────────────────────────
