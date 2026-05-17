@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Zap, Edit3, Radio, ArrowRight, Wand2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { MemeGenerator } from '../components/MemeGenerator';
-import { TrendingTopics } from '../components/TrendingTopics';
 import { PageTransition, staggerChild } from '../components/PageTransition';
+
+const MemeGenerator = lazy(() => import('../components/MemeGenerator').then(m => ({ default: m.MemeGenerator })));
+const TrendingTopics = lazy(() => import('../components/TrendingTopics').then(m => ({ default: m.TrendingTopics })));
 
 const features = [
   {
@@ -129,7 +130,9 @@ export function Home() {
                 <ArrowRight size={12} />
               </Link>
             </div>
-            <MemeGenerator topic={selectedTopic} />
+            <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading generator...</div>}>
+              <MemeGenerator topic={selectedTopic} />
+            </Suspense>
           </div>
 
           {/* Sidebar (1/4) */}
@@ -139,11 +142,12 @@ export function Home() {
                 <Radio size={14} className="text-acid" />
                 Trending Now
               </div>
-              <TrendingTopics onTopicSelect={setSelectedTopic} maxItems={6} variant="sidebar" />
+              <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading trending...</div>}>
+                <TrendingTopics onTopicSelect={setSelectedTopic} maxItems={6} variant="sidebar" />
+              </Suspense>
             </div>
           </div>
         </motion.section>
-
       </div>
     </PageTransition>
   );

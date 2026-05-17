@@ -12,7 +12,7 @@ export function AuthCallback() {
 
   useEffect(() => {
     const token = searchParams.get('token');
-    
+
     if (token) {
       // Fetch user data with this token to verify it
       apiClient.getCurrentUser(token)

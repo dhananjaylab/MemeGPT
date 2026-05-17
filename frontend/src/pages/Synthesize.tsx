@@ -1,7 +1,9 @@
+import { Suspense, lazy } from 'react';
 import { motion } from 'framer-motion';
 import { Wand2 } from 'lucide-react';
-import { MemeGenerator } from '../components/MemeGenerator';
 import { PageTransition, staggerChild } from '../components/PageTransition';
+
+const MemeGenerator = lazy(() => import('../components/MemeGenerator').then(m => ({ default: m.MemeGenerator })));
 
 export function Synthesize() {
   return (
@@ -20,7 +22,9 @@ export function Synthesize() {
         </motion.div>
 
         <motion.div variants={staggerChild}>
-          <MemeGenerator />
+          <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading generator...</div>}>
+            <MemeGenerator />
+          </Suspense>
         </motion.div>
       </div>
     </PageTransition>
