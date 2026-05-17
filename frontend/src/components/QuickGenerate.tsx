@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Zap, Loader2, Copy, Download, RefreshCw, Sparkles, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
@@ -37,6 +37,15 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
   const [result, setResult] = useState<QuickMemeResponse | null>(null);
   const [aiProvider, setAiProvider] = useState<'openai' | 'gemini'>('openai');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sseRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+      }
+    };
+  }, []);
 
   const generate = useCallback(async () => {
     const trimmed = prompt.trim();
@@ -53,32 +62,78 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
     setIsGenerating(true);
     const startMs = performance.now();
 
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+
     try {
       const res = await generateMemeQuick({ prompt: trimmed, ai_provider: aiProvider });
-      setResult(res);
-      onGenerated?.(res);
 
-      const totalMs = Math.round(performance.now() - startMs);
-      if (res.cache_hit) {
-        toast.success(`Served from cache in ${totalMs}ms ⚡`, { duration: 2500 });
+      if ('job_id' in res) {
+        const eventSource = new EventSource(`/api/jobs/${res.job_id}/stream`);
+        sseRef.current = eventSource;
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.status === 'completed' && data.memes && data.memes.length > 0) {
+              eventSource.close();
+              sseRef.current = null;
+              const meme = data.memes[0];
+              const totalMs = Math.round(performance.now() - startMs);
+              const finalRes: QuickMemeResponse = {
+                meme_id: meme.id,
+                image_url: meme.image_url,
+                template_name: meme.template_name,
+                meme_text: meme.meme_text,
+                cache_hit: false,
+                generation_time_ms: totalMs,
+              };
+              setResult(finalRes);
+              onGenerated?.(finalRes);
+              setIsGenerating(false);
+
+              confetti({
+                particleCount: 80,
+                spread: 60,
+                origin: { y: 0.7 },
+                colors: ['#B0FF00', '#00FFFF', '#FF00FF', '#FFD700'],
+              });
+              toast.success(`Generated in ${totalMs}ms 🔥`, { duration: 2500 });
+            } else if (data.status === 'failed') {
+              eventSource.close();
+              sseRef.current = null;
+              setIsGenerating(false);
+              toast.error(data.error || 'Generation failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE message', e);
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          sseRef.current = null;
+          setIsGenerating(false);
+          toast.error('Lost connection to generation stream');
+        };
       } else {
-        confetti({
-          particleCount: 80,
-          spread: 60,
-          origin: { y: 0.7 },
-          colors: ['#B0FF00', '#00FFFF', '#FF00FF', '#FFD700'],
-        });
-        toast.success(`Generated in ${totalMs}ms 🔥`, { duration: 2500 });
+        setResult(res);
+        onGenerated?.(res);
+        setIsGenerating(false);
+
+        const totalMs = Math.round(performance.now() - startMs);
+        toast.success(`Served from cache in ${totalMs}ms ⚡`, { duration: 2500 });
       }
     } catch (err: any) {
+      setIsGenerating(false);
       const msg = err?.message || 'Generation failed';
       if (err?.isRateLimit) {
         toast.error('Rate limit hit — try again in a bit 😅');
       } else {
         toast.error(msg);
       }
-    } finally {
-      setIsGenerating(false);
     }
   }, [prompt, aiProvider, onGenerated]);
 

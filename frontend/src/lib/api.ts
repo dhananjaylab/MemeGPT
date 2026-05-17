@@ -126,11 +126,11 @@ class APIClient {
   }
 
   /**
-   * Fast synchronous generation — no queue, single HTTP round-trip.
-   * Returns the image URL directly (cache-aware: ~5ms on cache hit).
+   * Fast generation — returns the image URL directly if cached (~5ms),
+   * otherwise returns 202 Accepted with job_id for SSE streaming.
    */
-  async generateMemeQuick(request: QuickMemeRequest): Promise<QuickMemeResponse> {
-    return this.request<QuickMemeResponse>('/memes/generate/quick', {
+  async generateMemeQuick(request: QuickMemeRequest): Promise<QuickMemeResponse | { job_id: string; status: string }> {
+    return this.request<QuickMemeResponse | { job_id: string; status: string }>('/memes/generate/quick', {
       method: 'POST',
       body: JSON.stringify(request),
     });

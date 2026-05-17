@@ -39,7 +39,8 @@ MemeGPT leverages OpenAI (GPT-4o) and Google Gemini models to create intelligent
 - **Multi-Model AI**: Failover between OpenAI (GPT-4o) and Google Gemini for robust caption generation.
 - **Imgflip Integration**: Access to 100+ popular templates with local fallback capabilities.
 - **Manual Editor**: Precise, full control over text placement, styling, and formatting.
-- **Async Processing**: Fast, non-blocking generation powered by ARQ (Redis Queue).
+- **Event-Driven Architecture**: Fast synchronous caching (<10ms) combined with ARQ background worker offloading and real-time Server-Sent Events (SSE) streaming for heavy generation tasks.
+- **Secure API Key Management**: Strict "Store-Hash, Show-Once" lifecycle policy using SHA-256 hashing for API keys and masked prefix display.
 - **Optimized Storage**: Cloudflare R2 integration for CDN-ready delivery with local filesystem fallback.
 - **Subscription Support**: Stripe integration with tiered rate limiting.
 - **Cloud Native**: Fully containerized with Docker and Docker Compose support.
@@ -47,6 +48,18 @@ MemeGPT leverages OpenAI (GPT-4o) and Google Gemini models to create intelligent
 ---
 
 ## 2. Architecture & Tech Stack
+
+### 🔒 API Key Lifecycle Policy ("Store-Hash, Show-Once")
+To protect developer credentials and prevent unauthorized database access, MemeGPT enforces an enterprise-grade API key security policy:
+- **Storage**: Plaintext API keys are **never** persisted in the database. All keys are hashed using `SHA-256` upon generation or migration.
+- **Display**: The UI and database retain only a masked prefix (e.g., `mgpt_••••••••••`) for identification.
+- **Generation & Rotation**: When a user generates or regenerates an API key, the plaintext key is displayed exactly **once** in the UI. If a key is lost, it cannot be retrieved and must be regenerated.
+
+### ⚡ Quick Generation Flow (`/generate/quick`)
+The `/generate/quick` endpoint employs a hybrid synchronous/asynchronous architecture to ensure high throughput and prevent worker thread exhaustion:
+1. **Cache-First**: Requests are checked against Redis and database caches. On a hit, the final meme URL is returned instantly (<10ms).
+2. **Worker Offload**: On a cache miss, heavy tasks (LLM requests, PIL rendering, R2 uploads) are offloaded to an ARQ background worker.
+3. **Event-Driven Push**: The API immediately returns `202 Accepted` with a `job_id`. The client connects to the `/api/jobs/{job_id}/stream` Server-Sent Events (SSE) endpoint to receive real-time status updates and the final meme URL once processing completes.
 
 ### 📂 Directory Structure
 ```text
