@@ -156,7 +156,7 @@ async def _compose_and_upload(
             image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
             
             if not image_url:
-                raise RuntimeError("Image upload failed")
+                raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
     else:
         # Use local compositor for non-Imgflip templates
         image_path = await overlay_text_on_image_async(template_dict, texts)
@@ -166,7 +166,7 @@ async def _compose_and_upload(
         image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
         if not image_url:
-            raise RuntimeError("Image upload failed")
+            raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
 
     meme = GeneratedMeme(
         id=str(uuid4()),
