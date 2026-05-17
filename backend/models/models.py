@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Index,
+    Boolean, Column, DateTime, Float, ForeignKey, Index,
     Integer, JSON, String, Text
 )
 from sqlalchemy.orm import relationship
@@ -55,6 +55,7 @@ class GeneratedMeme(Base):
     thumbnail_url: Optional[str] = Column(String, nullable=True)
     share_count: int = Column(Integer, default=0, index=True)
     like_count: int = Column(Integer, default=0, index=True)
+    trending_score: float = Column(Float, default=0.0, nullable=False, index=True)
     is_public: bool = Column(Boolean, default=True, index=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
@@ -64,6 +65,7 @@ class GeneratedMeme(Base):
         Index("ix_memes_public_created",   "is_public",     "created_at"),
         Index("ix_memes_template_created", "template_name", "created_at"),
         Index("ix_memes_user_created",     "user_id",       "created_at"),
+        Index("ix_memes_public_trending",  "is_public",     "trending_score"),
     )
 
     @property

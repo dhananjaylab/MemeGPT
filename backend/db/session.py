@@ -48,14 +48,19 @@ def _init_engine():
 
 
 async def get_db() -> AsyncSession:
-    """Get a database session for dependency injection."""
+    """Get a database session for dependency injection.
+
+    IMPORTANT: This dependency does NOT auto-commit.  Read-only endpoints
+    (GET /memes, GET /templates, etc.) exit without touching the WAL.
+    Any mutation endpoint must call ``await db.commit()`` explicitly after
+    its INSERT / UPDATE / DELETE operations.
+    """
     if AsyncSessionLocal is None:
         _init_engine()
-    
+
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
         except Exception as e:
             await session.rollback()
             logger.error(f"Database error: {e}")

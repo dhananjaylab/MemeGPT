@@ -38,6 +38,12 @@ from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator
 from services.storage import upload_to_r2
 from services.template_catalog import build_template_fields
+from services.trending import (
+    compute_trending_score,
+    get_trending_meme_ids,
+    remove_from_trending,
+    update_trending_score,
+)
 from services.worker import enqueue_meme_generation
 
 logger = logging.getLogger(__name__)
@@ -384,9 +390,61 @@ async def get_public_memes(
     if sort == "top":
         query = query.order_by(desc(GeneratedMeme.share_count))
     elif sort == "trending":
-        query = query.order_by(
-            desc(GeneratedMeme.share_count * 0.7)
-        )
+        # ── Fast path: Redis sorted-set leaderboard ──────────────────
+        trending_ids = await get_trending_meme_ids(offset, limit)
+        if trending_ids:
+            # Fetch only the memes whose IDs came back from Redis
+            id_query = (
+                select(GeneratedMeme)
+                .where(
+                    GeneratedMeme.is_public == True,
+                    GeneratedMeme.id.in_(trending_ids),
+                )
+            )
+            if search and search_term:
+                id_query = id_query.where(
+                    GeneratedMeme.prompt.ilike(search_term)
+                    | GeneratedMeme.template_name.ilike(search_term)
+                )
+            result = await db.execute(id_query)
+            memes_map = {m.id: m for m in result.scalars().all()}
+            # Preserve the Redis ranking order
+            memes = [memes_map[mid] for mid in trending_ids if mid in memes_map]
+
+            count_q = select(func.count()).select_from(GeneratedMeme).where(
+                GeneratedMeme.is_public == True
+            )
+            if search and search_term:
+                count_q = count_q.where(
+                    GeneratedMeme.prompt.ilike(search_term)
+                    | GeneratedMeme.template_name.ilike(search_term)
+                )
+            total = (await db.execute(count_q)).scalar() or 0
+
+            return MemeListResponse(
+                memes=[
+                    MemeResponse(
+                        id=m.id,
+                        template_name=m.template_name,
+                        template_id=m.template_id,
+                        prompt=m.prompt,
+                        meme_text=m.meme_text,
+                        image_url=m.image_url,
+                        created_at=m.created_at.isoformat(),
+                        share_count=m.share_count,
+                        like_count=m.like_count,
+                        is_public=m.is_public,
+                    )
+                    for m in memes
+                ],
+                total=total,
+                page=page,
+                limit=limit,
+                has_more=offset + len(memes) < total,
+            )
+
+        # ── Fallback: indexed trending_score column ──────────────────
+        query = query.order_by(desc(GeneratedMeme.trending_score))
     else:
         query = query.order_by(desc(GeneratedMeme.created_at))
 
@@ -608,7 +666,10 @@ async def share_meme(meme_id: str, db: AsyncSession = Depends(get_db)):
     if not meme or not meme.is_public:
         raise HTTPException(status_code=404, detail="Meme not found")
     meme.share_count += 1
+    meme.trending_score = compute_trending_score(meme.share_count, meme.like_count)
     await db.commit()
+    # Update Redis leaderboard (fire-and-forget, failures are logged)
+    await update_trending_score(meme.id, meme.share_count, meme.like_count)
     return {"message": "Share count updated", "share_count": meme.share_count}
 
 
@@ -619,7 +680,9 @@ async def like_meme(meme_id: str, db: AsyncSession = Depends(get_db)):
     if not meme:
         raise HTTPException(status_code=404, detail="Meme not found")
     meme.like_count += 1
+    meme.trending_score = compute_trending_score(meme.share_count, meme.like_count)
     await db.commit()
+    await update_trending_score(meme.id, meme.share_count, meme.like_count)
     return {"message": "Liked", "liked": True, "like_count": meme.like_count}
 
 
@@ -639,6 +702,7 @@ async def delete_meme(
         raise HTTPException(status_code=403, detail="Not authorized")
     await db.delete(meme)
     await db.commit()
+    await remove_from_trending(meme.id)
     return {"message": "Meme deleted successfully"}
 
 
