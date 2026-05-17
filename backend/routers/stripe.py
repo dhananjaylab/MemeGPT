@@ -22,6 +22,7 @@ from core.config import settings
 from db.session import get_db
 from models.models import User
 from services.auth import get_current_user
+from services.api_key import generate_api_key
 
 stripe.api_key = settings.stripe_secret_key
 WEBHOOK_SECRET = settings.stripe_webhook_secret
@@ -122,11 +123,13 @@ async def stripe_webhook(
 
         if user_id:
             new_limit = PLAN_LIMITS.get(plan, 500)
-            api_key = f"mgpt_{uuid.uuid4().hex}" if plan == "api" else None
-
             updates: dict = {"plan": plan, "daily_limit": new_limit}
-            if api_key:
-                updates["api_key"] = api_key
+
+            if plan == "api":
+                # Generate new key: plaintext (show once), hash (store), prefix (display)
+                plaintext_key, key_hash, key_prefix = generate_api_key()
+                updates["api_key"] = key_hash
+                updates["api_key_prefix"] = key_prefix
 
             await db.execute(
                 update(User).where(User.id == user_id).values(**updates)
@@ -146,7 +149,7 @@ async def stripe_webhook(
                 await db.execute(
                     update(User)
                     .where(User.email == email)
-                    .values(plan="free", daily_limit=settings.rate_limit_free, api_key=None)
+                    .values(plan="free", daily_limit=settings.rate_limit_free, api_key=None, api_key_prefix=None)
                 )
                 await db.commit()
         except Exception:

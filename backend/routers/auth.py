@@ -30,6 +30,7 @@ class UserResponse(BaseModel):
     daily_limit: int
     daily_used: int
     api_key: Optional[str] = None
+    api_key_prefix: Optional[str] = None
     created_at: str
 
 
@@ -66,7 +67,8 @@ async def login_or_create_user(
             plan=user.plan,
             daily_limit=user.daily_limit,
             daily_used=user.daily_used,
-            api_key=user.api_key,
+            api_key=None,  # Never expose the database hash
+            api_key_prefix=user.api_key_prefix,
             created_at=user.created_at.isoformat()
         )
     )
@@ -90,6 +92,7 @@ async def get_current_user_info(
         plan=current_user.plan,
         daily_limit=current_user.daily_limit,
         daily_used=current_user.daily_used,
-        api_key=current_user.api_key,
+        api_key=None,  # Never expose the database hash
+        api_key_prefix=current_user.api_key_prefix,
         created_at=current_user.created_at.isoformat()
     )

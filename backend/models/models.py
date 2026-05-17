@@ -18,7 +18,8 @@ class User(Base):
     plan: str = Column(String, default="free", index=True)
     daily_limit: int = Column(Integer, default=5)
     daily_used: int = Column(Integer, default=0)
-    api_key: Optional[str] = Column(String, nullable=True, unique=True, index=True)
+    api_key: Optional[str] = Column(String, nullable=True, unique=True, index=True)  # stores SHA-256 hash
+    api_key_prefix: Optional[str] = Column(String, nullable=True)  # display prefix, e.g. "mgpt_ab12…"
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     preferences: dict = Column(JSON, default={}, nullable=False)

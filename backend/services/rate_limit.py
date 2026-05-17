@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from core.config import settings
 from models.models import User
+from services.api_key import hash_api_key
 
 _redis: Optional[aioredis.Redis] = None
 
@@ -111,9 +112,10 @@ async def rate_limit_request(
     # Case 3: API Key check (Middleware level)
     elif request.headers.get("X-API-Key"):
         api_key = request.headers.get("X-API-Key")
-        identifier = f"api:{hashlib.md5(api_key.encode()).hexdigest()[:16]}"
+        key_hash = hash_api_key(api_key)
+        identifier = f"api:{hashlib.md5(key_hash.encode()).hexdigest()[:16]}"
         if db:
-            result = await db.execute(select(User).where(User.api_key == api_key))
+            result = await db.execute(select(User).where(User.api_key == key_hash))
             db_user = result.scalar_one_or_none()
             if db_user:
                 limit = db_user.daily_limit or settings.rate_limit_api

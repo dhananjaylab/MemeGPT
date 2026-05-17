@@ -211,8 +211,8 @@ class APIClient {
     });
   }
 
-  async rotateApiKey(token?: string): Promise<{ api_key: string }> {
-    return this.request<{ api_key: string }>('/auth/rotate-key', {
+  async rotateApiKey(token?: string): Promise<{ api_key: string; api_key_prefix: string; warning?: string }> {
+    return this.request<{ api_key: string; api_key_prefix: string; warning?: string }>('/auth/rotate-key', {
       method: 'POST',
       headers: this.getAuthHeaders(token),
     });

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from core.config import settings
 from db.session import get_db
 from models.models import User
+from services.api_key import hash_api_key
 
 security = HTTPBearer(auto_error=False)
 
@@ -42,10 +43,11 @@ async def get_current_user_optional(
 ) -> Optional[User]:
     """Get current user from JWT token or API key (optional - returns None if not authenticated)"""
     
-    # Check for API key in headers
+    # Check for API key in headers — hash it and compare against stored hash
     api_key = request.headers.get("X-API-Key")
     if api_key:
-        result = await db.execute(select(User).where(User.api_key == api_key))
+        key_hash = hash_api_key(api_key)
+        result = await db.execute(select(User).where(User.api_key == key_hash))
         user = result.scalar_one_or_none()
         if user:
             return user
