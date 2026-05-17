@@ -10,6 +10,7 @@ v2 enhancements:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -32,6 +33,7 @@ from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator, AIProvider
 from services.storage import upload_to_r2
 from services.worker import close_arq_pool, get_arq_pool
+from services.rate_limit import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,20 @@ async def update_job_status(
 
             await db.execute(update(MemeJob).where(MemeJob.id == job_id).values(**data))
             await db.commit()
+
+            # Publish status to Redis pubsub for SSE streams
+            try:
+                redis = await get_redis()
+                msg = {
+                    "id": job_id,
+                    "status": status,
+                }
+                if error_message:
+                    msg["error"] = error_message
+                await redis.publish(f"job_status:{job_id}", json.dumps(msg))
+            except Exception as redis_exc:
+                logger.error("Failed to publish job status to Redis: %s", redis_exc)
+
             return True
     except Exception as exc:
         logger.error("Failed to update job %s: %s", job_id, exc)

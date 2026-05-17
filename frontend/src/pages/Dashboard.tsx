@@ -84,7 +84,10 @@ export function Dashboard() {
   };
 
   const copyKey = async () => {
-    if (!user?.api_key) return;
+    if (!user?.api_key) {
+      toast.error("Full key is hidden for security. Rotate key to copy a new one.");
+      return;
+    }
     await navigator.clipboard.writeText(user.api_key);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -110,8 +113,8 @@ export function Dashboard() {
     try {
       const res = await apiClient.rotateApiKey(backendToken || undefined);
       if (res.api_key && user) {
-        setUser({ ...user, api_key: res.api_key });
-        toast.success("API key rotated successfully!");
+        setUser({ ...user, api_key: res.api_key, api_key_prefix: res.api_key_prefix, has_api_key: true });
+        toast.success("API key rotated successfully! Please copy it now.");
       }
     } catch (err: any) {
       console.error("Rotate error:", err);
@@ -257,7 +260,7 @@ export function Dashboard() {
       <section id="api">
         <SectionHeading icon={Key} label="API access" />
         <div className="glass-card p-5 border border-border/40">
-          {plan === "api" && user?.api_key ? (
+          {plan === "api" && (user?.api_key || user?.has_api_key || user?.api_key_prefix) ? (
             <>
               <p className="font-mono text-xs text-secondary mb-3 leading-relaxed">
                 Include this key in every request as{" "}
@@ -266,8 +269,8 @@ export function Dashboard() {
               <div className="flex items-center gap-2">
                 <div className="flex-1 bg-background/40 border border-border/50 rounded-lg px-3 py-2 font-mono text-xs text-secondary overflow-hidden backdrop-blur-sm">
                   {keyVisible
-                    ? user.api_key
-                    : "mgpt_" + "•".repeat(Math.max(0, user.api_key.length - 5))}
+                    ? (user.api_key || "•••••••••••••••••••••••• (Key hidden for security, rotate to view new key)")
+                    : (user.api_key ? "mgpt_" + "•".repeat(Math.max(0, user.api_key.length - 5)) : (user.api_key_prefix || "mgpt_••••••••••"))}
                 </div>
                 <button
                   onClick={() => setKeyVisible((v) => !v)}

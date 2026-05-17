@@ -197,7 +197,7 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
     """
     Upload image to Cloudflare R2 with optimization and CDN configuration
     Returns dictionary with URLs for different variants.
-    Falls back to local storage if R2 is unavailable.
+    Falls back to local storage if R2 is unavailable (development only).
     """
     try:
         # Try R2 upload if credentials are configured
@@ -245,12 +245,26 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
                 logger.info(f"Successfully uploaded to R2: {urls}")
                 return urls
             else:
+                if settings.is_production:
+                    logger.error("R2 upload returned empty URLs. Production environment: failing without local storage fallback.")
+                    return None
                 logger.warning("R2 upload returned empty URLs, falling back to local storage")
         else:
+            if settings.is_production:
+                logger.error("R2 credentials not configured in production environment. Failing without local storage fallback.")
+                return None
             logger.info("R2 credentials not configured, using local storage fallback")
     except Exception as e:
         error_msg = str(e)
         if "Unauthorized" in error_msg:
+            if settings.is_production:
+                logger.error(
+                    "CRITICAL: R2 storage authentication failed (Unauthorized). "
+                    "The provided R2 credentials in .env are invalid or lack permissions. "
+                    "Check R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. "
+                    "Production environment: failing without local storage fallback."
+                )
+                return None
             logger.error(
                 "CRITICAL: R2 storage authentication failed (Unauthorized). "
                 "The provided R2 credentials in .env are invalid or lack permissions. "
@@ -258,8 +272,15 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
                 "Falling back to local storage for now."
             )
         else:
+            if settings.is_production:
+                logger.error(f"R2 upload failed ({error_msg}). Production environment: failing without local storage fallback.")
+                return None
             logger.warning(f"R2 upload failed ({error_msg}), falling back to local storage")
     
+    if settings.is_production:
+        logger.error("R2 storage unavailable. Production environment: failing without local storage fallback.")
+        return None
+
     # Fallback: Use local static storage
     try:
         output_dir = Path(__file__).parent.parent / "public" / "output"

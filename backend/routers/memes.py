@@ -19,7 +19,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,12 @@ from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator
 from services.storage import upload_to_r2
 from services.template_catalog import build_template_fields
+from services.trending import (
+    compute_trending_score,
+    get_trending_meme_ids,
+    remove_from_trending,
+    update_trending_score,
+)
 from services.worker import enqueue_meme_generation
 
 logger = logging.getLogger(__name__)
@@ -156,7 +162,7 @@ async def _compose_and_upload(
             image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
             
             if not image_url:
-                raise RuntimeError("Image upload failed")
+                raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
     else:
         # Use local compositor for non-Imgflip templates
         image_path = await overlay_text_on_image_async(template_dict, texts)
@@ -166,7 +172,7 @@ async def _compose_and_upload(
         image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
         if not image_url:
-            raise RuntimeError("Image upload failed")
+            raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
 
     meme = GeneratedMeme(
         id=str(uuid4()),
@@ -227,122 +233,93 @@ async def generate_meme(
 
 # ── /generate/quick (synchronous fast-path) ───────────────────────────────────
 
-@router.post("/generate/quick", response_model=QuickMemeResponse)
+@router.post("/generate/quick")
 async def generate_meme_quick(
     body: QuickMemeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
-    Synchronous meme generation — returns the image URL in one HTTP round-trip.
-
-    Best for:
-      • Manual editor submissions (template + captions already known)
-      • Frontend preview generation
-      • API users who need low-latency responses
-
-    Cache behaviour:
-      • Captions are cached by prompt hash (1 h)
-      • Final image URLs are cached by template_id + texts hash (24 h)
-      → Identical requests served in < 10 ms after first generation
+    Fast meme generation — returns the image URL directly if cached (<10ms),
+    otherwise offloads to ARQ worker and returns 202 Accepted with job_id for SSE streaming.
     """
     t0 = time.monotonic()
-    cache_hit = False
 
-    # ── 1. Resolve template and texts ────────────────────────────────────────
+    # ── 1. Check if we can serve instantly from cache ────────────────────────
     if body.template_id is not None and body.captions:
-        # Manual mode — no AI needed
+        # Manual mode
         template_id = body.template_id
         texts = [c.strip() for c in body.captions]
         prompt = body.prompt or "manual"
 
+        # Check meme image cache
+        cached_url = await get_cached_meme_url(template_id, texts)
+        if cached_url:
+            res = await db.execute(
+                select(GeneratedMeme)
+                .where(GeneratedMeme.image_url == cached_url)
+                .limit(1)
+            )
+            existing = res.scalar_one_or_none()
+            if existing:
+                return QuickMemeResponse(
+                    meme_id=existing.id,
+                    image_url=cached_url,
+                    template_name=existing.template_name,
+                    meme_text=texts,
+                    cache_hit=True,
+                    generation_time_ms=int((time.monotonic() - t0) * 1000),
+                )
     elif body.prompt:
-        # Auto mode — ask AI for the single best match
         prompt = body.prompt.strip()
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt cannot be empty")
 
         cached_caps = await get_cached_captions(prompt)
         if cached_caps:
-            cache_hit = True
             best = cached_caps[0]
-        else:
-            generator = await get_caption_generator(body.ai_provider)
-            caps = await generator(prompt)
-            logger.error(f"CAPS RETURNED: {caps}")
-            if not caps:
-                raise HTTPException(status_code=500, detail="AI failed to generate captions")
-            await set_cached_captions(prompt, caps)
-            best = caps[0]
+            template_id = int(best.get("meme_id", best.get("id")))
+            texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
 
-        template_id = int(best.get("meme_id", best.get("id")))
-        texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
+            cached_url = await get_cached_meme_url(template_id, texts)
+            if cached_url:
+                res = await db.execute(
+                    select(GeneratedMeme)
+                    .where(GeneratedMeme.image_url == cached_url)
+                    .limit(1)
+                )
+                existing = res.scalar_one_or_none()
+                if existing:
+                    return QuickMemeResponse(
+                        meme_id=existing.id,
+                        image_url=cached_url,
+                        template_name=existing.template_name,
+                        meme_text=texts,
+                        cache_hit=True,
+                        generation_time_ms=int((time.monotonic() - t0) * 1000),
+                    )
     else:
         raise HTTPException(
             status_code=400,
             detail="Provide either (template_id + captions) or prompt",
         )
 
-    # ── 2. Load template ─────────────────────────────────────────────────────
-    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
-    template = result.scalar_one_or_none()
-    if not template:
-        raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
+    # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
+    ai_provider = (body.ai_provider or "openai").lower()
+    generation_mode = "manual" if (body.template_id is not None and body.captions) else "auto"
 
-    template_dict = {
-        "id": template.id,
-        "name": template.name,
-        "file_path": template.file_path,
-        "font_path": template.font_path,
-        "text_color": template.text_color,
-        "text_stroke": template.text_stroke,
-        "text_coordinates_xy_wh": template.text_coordinates_xy_wh,
-        "number_of_text_fields": template.number_of_text_fields,
-        "image_url": template.image_url,
-        "source": template.source,
-        "imgflip_id": template.imgflip_id,
-    }
+    job_id = await enqueue_meme_generation(
+        prompt=prompt,
+        user=current_user,
+        ai_provider=ai_provider,
+        generation_mode=generation_mode,
+        manual_template_id=body.template_id,
+        manual_captions=body.captions,
+    )
 
-    # Trim texts to template capacity
-    texts = texts[: template.number_of_text_fields]
-    while len(texts) < template.number_of_text_fields:
-        texts.append("")
-
-    # ── 3. Check meme image cache ────────────────────────────────────────────
-    cached_url = await get_cached_meme_url(template_id, texts)
-    if cached_url:
-        cache_hit = True
-        # Find matching DB record or create a lightweight one
-        res = await db.execute(
-            select(GeneratedMeme)
-            .where(GeneratedMeme.image_url == cached_url)
-            .limit(1)
-        )
-        existing = res.scalar_one_or_none()
-
-        if existing:
-            return QuickMemeResponse(
-                meme_id=existing.id,
-                image_url=cached_url,
-                template_name=template.name,
-                meme_text=texts,
-                cache_hit=True,
-                generation_time_ms=int((time.monotonic() - t0) * 1000),
-            )
-
-    # ── 4. Compose & upload ───────────────────────────────────────────────────
-    user_id = current_user.id if current_user else None
-    meme = await _compose_and_upload(template_dict, texts, prompt, user_id, db)
-
-    await set_cached_meme_url(template_id, texts, meme.image_url)
-
-    return QuickMemeResponse(
-        meme_id=meme.id,
-        image_url=meme.image_url,
-        template_name=meme.template_name,
-        meme_text=meme.meme_text,
-        cache_hit=cache_hit,
-        generation_time_ms=int((time.monotonic() - t0) * 1000),
+    return JSONResponse(
+        status_code=202,
+        content={"job_id": job_id, "status": "pending"}
     )
 
 
@@ -384,9 +361,61 @@ async def get_public_memes(
     if sort == "top":
         query = query.order_by(desc(GeneratedMeme.share_count))
     elif sort == "trending":
-        query = query.order_by(
-            desc(GeneratedMeme.share_count * 0.7)
-        )
+        # ── Fast path: Redis sorted-set leaderboard ──────────────────
+        trending_ids = await get_trending_meme_ids(offset, limit)
+        if trending_ids:
+            # Fetch only the memes whose IDs came back from Redis
+            id_query = (
+                select(GeneratedMeme)
+                .where(
+                    GeneratedMeme.is_public == True,
+                    GeneratedMeme.id.in_(trending_ids),
+                )
+            )
+            if search and search_term:
+                id_query = id_query.where(
+                    GeneratedMeme.prompt.ilike(search_term)
+                    | GeneratedMeme.template_name.ilike(search_term)
+                )
+            result = await db.execute(id_query)
+            memes_map = {m.id: m for m in result.scalars().all()}
+            # Preserve the Redis ranking order
+            memes = [memes_map[mid] for mid in trending_ids if mid in memes_map]
+
+            count_q = select(func.count()).select_from(GeneratedMeme).where(
+                GeneratedMeme.is_public == True
+            )
+            if search and search_term:
+                count_q = count_q.where(
+                    GeneratedMeme.prompt.ilike(search_term)
+                    | GeneratedMeme.template_name.ilike(search_term)
+                )
+            total = (await db.execute(count_q)).scalar() or 0
+
+            return MemeListResponse(
+                memes=[
+                    MemeResponse(
+                        id=m.id,
+                        template_name=m.template_name,
+                        template_id=m.template_id,
+                        prompt=m.prompt,
+                        meme_text=m.meme_text,
+                        image_url=m.image_url,
+                        created_at=m.created_at.isoformat(),
+                        share_count=m.share_count,
+                        like_count=m.like_count,
+                        is_public=m.is_public,
+                    )
+                    for m in memes
+                ],
+                total=total,
+                page=page,
+                limit=limit,
+                has_more=offset + len(memes) < total,
+            )
+
+        # ── Fallback: indexed trending_score column ──────────────────
+        query = query.order_by(desc(GeneratedMeme.trending_score))
     else:
         query = query.order_by(desc(GeneratedMeme.created_at))
 
@@ -608,7 +637,10 @@ async def share_meme(meme_id: str, db: AsyncSession = Depends(get_db)):
     if not meme or not meme.is_public:
         raise HTTPException(status_code=404, detail="Meme not found")
     meme.share_count += 1
+    meme.trending_score = compute_trending_score(meme.share_count, meme.like_count)
     await db.commit()
+    # Update Redis leaderboard (fire-and-forget, failures are logged)
+    await update_trending_score(meme.id, meme.share_count, meme.like_count)
     return {"message": "Share count updated", "share_count": meme.share_count}
 
 
@@ -619,7 +651,9 @@ async def like_meme(meme_id: str, db: AsyncSession = Depends(get_db)):
     if not meme:
         raise HTTPException(status_code=404, detail="Meme not found")
     meme.like_count += 1
+    meme.trending_score = compute_trending_score(meme.share_count, meme.like_count)
     await db.commit()
+    await update_trending_score(meme.id, meme.share_count, meme.like_count)
     return {"message": "Liked", "liked": True, "like_count": meme.like_count}
 
 
@@ -639,6 +673,7 @@ async def delete_meme(
         raise HTTPException(status_code=403, detail="Not authorized")
     await db.delete(meme)
     await db.commit()
+    await remove_from_trending(meme.id)
     return {"message": "Meme deleted successfully"}
 
 

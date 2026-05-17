@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from core.config import settings
 from models.models import User
+from services.api_key import hash_api_key
 
 _redis: Optional[aioredis.Redis] = None
 
@@ -28,10 +29,29 @@ async def get_redis() -> aioredis.Redis:
     return _redis
 
 
+FIXED_WINDOW_LUA = """
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+
+local current = tonumber(redis.call('GET', key) or "0")
+if current >= limit then
+    return {current + 1, 0}
+end
+
+current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+local remaining = limit - current
+return {current, remaining}
+"""
+
+
 def _window_key(identifier: str) -> str:
-    """Build a deterministic Redis key for the sliding window."""
+    """Build a deterministic Redis key for the fixed window."""
     safe = hashlib.md5(identifier.encode()).hexdigest()[:16]
-    return f"rl:sliding:{safe}"
+    return f"rl:fixed:{safe}"
 
 
 async def check_rate_limit(
@@ -40,26 +60,17 @@ async def check_rate_limit(
     window_seconds: int = 86400,  # 24 hour window
 ) -> Tuple[int, int]:
     """
-    Increment the counter and check against limit using a sliding window.
+    Increment the counter and check against limit using an atomic fixed window Lua script.
     Returns (current_count, remaining).
     Raises HTTP 429 if over limit.
     """
     redis = await get_redis()
     key = _window_key(identifier)
     now = time.time()
-    cutoff = now - window_seconds
 
-    pipe = redis.pipeline()
-    pipe.zremrangebyscore(key, 0, cutoff)
-    member = f"{now}:{hashlib.md5(str(now).encode()).hexdigest()[:8]}"
-    pipe.zadd(key, {member: now})
-    pipe.zcard(key)
-    pipe.expire(key, window_seconds + 3600)
-    
-    results = await pipe.execute()
-    
-    current_count = results[2]
-    remaining = max(0, limit - current_count)
+    results = await redis.eval(FIXED_WINDOW_LUA, 1, key, limit, window_seconds)
+    current_count = int(results[0])
+    remaining = int(results[1])
 
     if current_count > limit:
         raise HTTPException(
@@ -111,9 +122,10 @@ async def rate_limit_request(
     # Case 3: API Key check (Middleware level)
     elif request.headers.get("X-API-Key"):
         api_key = request.headers.get("X-API-Key")
-        identifier = f"api:{hashlib.md5(api_key.encode()).hexdigest()[:16]}"
+        key_hash = hash_api_key(api_key)
+        identifier = f"api:{hashlib.md5(key_hash.encode()).hexdigest()[:16]}"
         if db:
-            result = await db.execute(select(User).where(User.api_key == api_key))
+            result = await db.execute(select(User).where(User.api_key == key_hash))
             db_user = result.scalar_one_or_none()
             if db_user:
                 limit = db_user.daily_limit or settings.rate_limit_api

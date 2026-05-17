@@ -82,6 +82,8 @@ export interface User {
   daily_limit: number;
   daily_used: number;
   api_key?: string;
+  api_key_prefix?: string;
+  has_api_key?: boolean;
   created_at: string;
   updated_at: string;
 }
