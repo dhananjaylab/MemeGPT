@@ -9,6 +9,7 @@ v2 enhancements:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from enum import Enum
@@ -427,13 +428,54 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
         return None
 
 
+async def _race_generators(prompt: str) -> Optional[List[Dict[str, Any]]]:
+    """Race OpenAI and Gemini concurrently, returning the first successful result."""
+    tasks = []
+    if settings.has_openai:
+        tasks.append(asyncio.create_task(generate_meme_captions(prompt)))
+    if settings.has_gemini:
+        tasks.append(asyncio.create_task(generate_meme_captions_with_gemini(prompt)))
+
+    if not tasks:
+        logger.error("Cannot race AI providers: No providers configured")
+        return None
+
+    while tasks:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            try:
+                result = task.result()
+                if result and len(result) > 0:
+                    # Cancel any pending slow tasks
+                    for p in pending:
+                        p.cancel()
+                    return result
+            except Exception as e:
+                logger.error("Racing task failed: %s", e)
+        tasks = list(pending)
+
+    return None
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 async def get_caption_generator(provider: Optional[str] = None):
-    """Return a robust caption generator with built-in provider failover."""
+    """Return a robust caption generator with built-in provider failover and racing."""
     requested_provider = (provider or settings.ai_provider).lower()
 
     async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
+        try:
+            # 20-second timeout guard on overall generation
+            return await asyncio.wait_for(_run_generation(prompt), timeout=20.0)
+        except asyncio.TimeoutError:
+            logger.error("AI caption generation timed out after 20 seconds")
+            return None
+
+    async def _run_generation(prompt: str) -> Optional[List[Dict[str, Any]]]:
+        # If explicit race requested, or if not strictly requesting one and both are available
+        if requested_provider == AIProvider.BOTH.value or (requested_provider not in [AIProvider.OPENAI.value, AIProvider.GEMINI.value] and settings.has_openai and settings.has_gemini):
+            logger.info("Racing AI providers concurrently...")
+            return await _race_generators(prompt)
+
         # 1. Try requested provider first
         if requested_provider == AIProvider.GEMINI.value and settings.has_gemini:
             logger.info("Attempting caption generation with Gemini...")

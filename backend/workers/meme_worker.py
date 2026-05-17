@@ -103,6 +103,51 @@ async def get_template_by_id(
     }
 
 
+async def _resolve_image_url(template: Dict[str, Any], texts: List[str], job_id: str) -> Optional[str]:
+    template_id = template["id"]
+    cached_url = await get_cached_meme_url(template_id, texts)
+    if cached_url:
+        logger.info(
+            "Meme URL cache HIT for template %d job %s",
+            template_id, job_id,
+        )
+        return cached_url
+
+    image_url = None
+    if template.get("source") == "imgflip" and template.get("imgflip_id"):
+        logger.info(
+            "Using Imgflip API for template %d (imgflip_id=%s)",
+            template_id, template["imgflip_id"]
+        )
+        try:
+            imgflip_result = await imgflip_service.caption_image(
+                template["imgflip_id"],
+                texts
+            )
+            image_url = imgflip_result.get("data", {}).get("url")
+            if not image_url:
+                raise Exception("Imgflip API did not return image URL")
+            logger.info("Imgflip API generated meme: %s", image_url[:100])
+        except Exception as imgflip_exc:
+            logger.error(
+                "Imgflip API failed for template %d: %s. Falling back to compositor.",
+                template_id, imgflip_exc
+            )
+            image_path = await overlay_text_on_image_async(template, texts)
+            object_key = f"memes/{uuid4()}.png"
+            upload_result = await upload_to_r2(image_path, object_key)
+            image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+    else:
+        image_path = await overlay_text_on_image_async(template, texts)
+        object_key = f"memes/{uuid4()}.png"
+        upload_result = await upload_to_r2(image_path, object_key)
+        image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+
+    if image_url:
+        await set_cached_meme_url(template_id, texts, image_url)
+    return image_url
+
+
 # ── Core job handler ─────────────────────────────────────────────────────────
 
 async def process_meme_generation(
@@ -163,6 +208,7 @@ async def process_meme_generation(
         meme_ids: List[str] = []
 
         async with db_session.AsyncSessionLocal() as db:
+            render_tasks = []
             for ai_meme in captions:
                 try:
                     template_id = int(ai_meme["meme_id"])
@@ -172,67 +218,26 @@ async def process_meme_generation(
                         continue
 
                     texts: List[str] = ai_meme["meme_text"]
+                    
+                    task = asyncio.create_task(_resolve_image_url(template, texts, job_id))
+                    render_tasks.append((ai_meme, template, texts, task))
 
-                    # Check meme image cache
-                    cached_url = await get_cached_meme_url(template_id, texts)
-                    if cached_url:
-                        logger.info(
-                            "Meme URL cache HIT for template %d job %s",
-                            template_id, job_id,
-                        )
-                        image_url = cached_url
-                    else:
-                        # Check if this is an Imgflip template
-                        if template.get("source") == "imgflip" and template.get("imgflip_id"):
-                            logger.info(
-                                "Using Imgflip API for template %d (imgflip_id=%s)",
-                                template_id, template["imgflip_id"]
-                            )
-                            try:
-                                # Use Imgflip caption API
-                                imgflip_result = await imgflip_service.caption_image(
-                                    template["imgflip_id"],
-                                    texts
-                                )
-                                image_url = imgflip_result.get("data", {}).get("url")
-                                if not image_url:
-                                    raise Exception("Imgflip API did not return image URL")
-                                
-                                logger.info("Imgflip API generated meme: %s", image_url[:100])
-                            except Exception as imgflip_exc:
-                                logger.error(
-                                    "Imgflip API failed for template %d: %s. Falling back to compositor.",
-                                    template_id, imgflip_exc
-                                )
-                                # Fallback to local compositor
-                                image_path = await overlay_text_on_image_async(template, texts)
-                                object_key = f"memes/{uuid4()}.png"
-                                upload_result = await upload_to_r2(image_path, object_key)
-                                image_url = (
-                                    upload_result.get("primary")
-                                    if isinstance(upload_result, dict)
-                                    else None
-                                )
-                        else:
-                            # Use local compositor for non-Imgflip templates
-                            image_path = await overlay_text_on_image_async(template, texts)
+                except Exception as exc:
+                    logger.error("Error setting up compose for job %s: %s", job_id, exc)
 
-                            # Upload to R2 / local fallback
-                            object_key = f"memes/{uuid4()}.png"
-                            upload_result = await upload_to_r2(image_path, object_key)
-
-                            image_url = (
-                                upload_result.get("primary")
-                                if isinstance(upload_result, dict)
-                                else None
-                            )
-                        
-                        if not image_url:
-                            logger.error("Upload failed for job %s", job_id)
-                            continue
-
-                        # Cache the result
-                        await set_cached_meme_url(template_id, texts, image_url)
+            if render_tasks:
+                await asyncio.gather(*(t[3] for t in render_tasks), return_exceptions=True)
+            
+            for ai_meme, template, texts, task in render_tasks:
+                try:
+                    if task.exception():
+                        logger.error("Task error for job %s: %s", job_id, task.exception())
+                        continue
+                    
+                    image_url = task.result()
+                    if not image_url:
+                        logger.error("Failed to resolve image URL for job %s", job_id)
+                        continue
 
                     # Persist to DB
                     meme_id = str(uuid4())
@@ -242,7 +247,7 @@ async def process_meme_generation(
                             user_id=user_id,
                             prompt=prompt,
                             template_name=template["name"],
-                            template_id=template_id,
+                            template_id=template["id"],
                             meme_text=texts,
                             image_url=image_url,
                             is_public=True,
@@ -252,7 +257,7 @@ async def process_meme_generation(
 
                 except Exception as exc:
                     logger.error(
-                        "Error composing meme for job %s: %s", job_id, exc, exc_info=True
+                        "Error saving composed meme for job %s: %s", job_id, exc, exc_info=True
                     )
 
             await db.commit()
