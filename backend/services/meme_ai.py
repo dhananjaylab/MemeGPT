@@ -1,14 +1,14 @@
 """
-AI caption generator — supports OpenAI GPT-4o and Google Gemini.
+AI caption generator — uses Google Gemini.
 
 v2 enhancements:
   • Gen-Z cultural context injected into the system prompt
   • Structured JSON output with reasoning field
-  • Fallback chain: primary provider → fallback provider → error
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from enum import Enum
@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Optional
 
 from google import genai
 from google.genai import types
-from openai import AsyncOpenAI
 
 from core.config import settings
 
@@ -29,9 +28,7 @@ ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
 
 
 class AIProvider(str, Enum):
-    OPENAI = "openai"
     GEMINI = "gemini"
-    BOTH   = "both"
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -48,17 +45,39 @@ class MemeList(BaseModel):
 
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
-
-gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+gemini_client = genai.Client(
+    api_key=settings.gemini_api_key
+) if settings.gemini_api_key else None
 
 
 # ── Template data ─────────────────────────────────────────────────────────────
 
-def load_meme_data() -> str:
+# Load once at module import — eliminates repeated disk reads (called 6+ times per request)
+_MEME_DATA_STR: str = ""
+_MEME_DATA_LIST: list = []
+
+
+def _load_meme_data_once() -> None:
+    """Called once at module load time to populate in-memory caches."""
+    global _MEME_DATA_STR, _MEME_DATA_LIST
     p = ROOT_DIRECTORY / "public" / "meme_data.json"
     with open(p, encoding="utf-8") as f:
-        return f.read()
+        _MEME_DATA_STR = f.read()
+    _MEME_DATA_LIST = json.loads(_MEME_DATA_STR)
+    logger.info("Loaded %d meme templates into memory", len(_MEME_DATA_LIST))
+
+
+_load_meme_data_once()
+
+
+def load_meme_data() -> str:
+    """Return the cached meme data JSON string (no disk I/O)."""
+    return _MEME_DATA_STR
+
+
+def get_meme_data_list() -> list:
+    """Return the parsed meme template list (no disk I/O, no JSON parsing)."""
+    return _MEME_DATA_LIST
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -81,30 +100,6 @@ The order matters for the meme to make sense!
 _OUTPUT_SCHEMA_DESC = "Return a JSON object with an 'output' array containing exactly 3 meme objects."
 
 
-def _build_openai_system(meme_data: str) -> str:
-    return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
-
-{_GEN_Z_CONTEXT}
-
-AVAILABLE TEMPLATES:
-{meme_data}
-
-RULES:
-1. Pick 3 DIFFERENT templates — variety is key.
-2. Match the template structure exactly (number of text fields, tone).
-3. **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template.
-   - For "Distracted Boyfriend": [seductive thing, person, current commitment]
-   - For "Left Exit 12": [main road, person, exit road]
-   - Read the usage_instructions carefully and follow the field order!
-4. Keep text SHORT and punchy (max 10 words per field).
-5. Be funny, not cringe. Lean into current internet culture.
-6. The first option should be the most relatable/mainstream.
-7. The second option can be more niche/absurdist.
-8. The third option should be the wildcard / unexpected angle.
-
-Provide exactly 3 meme options with proper JSON structure."""
-
-
 def _build_gemini_system(meme_data: str) -> str:
     return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
 
@@ -118,158 +113,6 @@ Rules:
 - Text must be SHORT (max 10 words per field) and punchy
 - Match the exact number of text fields per template
 - Provide exactly 3 meme options with proper structure"""
-
-
-# ── OpenAI ────────────────────────────────────────────────────────────────────
-
-async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    if not openai_client:
-        logger.warning("OpenAI client not configured")
-        return None
-
-    meme_data = load_meme_data()
-    try:
-        resp = await openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": _build_openai_system(meme_data)},
-                {"role": "user",   "content": prompt},
-            ],
-            temperature=1.1,    # slightly higher for more creative Gen-Z output
-            max_tokens=2048,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "meme_list",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "output": {
-                                "type": "array",
-                                "description": "Exactly 3 generated meme options",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "meme_id": {
-                                            "type": "integer",
-                                            "description": "The integer ID of the template from the provided list"
-                                        },
-                                        "meme_name": {
-                                            "type": "string",
-                                            "description": "The name of the template"
-                                        },
-                                        "meme_text": {
-                                            "type": "array",
-                                            "description": "The captions to place on the meme",
-                                            "items": {
-                                                "type": "string"
-                                            }
-                                        },
-                                        "reasoning": {
-                                            "type": "string",
-                                            "description": "One sentence explaining why this template fits the prompt"
-                                        }
-                                    },
-                                    "required": ["meme_id", "meme_name", "meme_text", "reasoning"],
-                                    "additionalProperties": False
-                                }
-                            }
-                        },
-                        "required": ["output"],
-                        "additionalProperties": False
-                    }
-                }
-            },
-        )
-        
-        content = resp.choices[0].message.content or ""
-        if not content.strip():
-            logger.error("OpenAI returned empty content")
-            return None
-            
-        logger.debug("Raw OpenAI response: %s", content[:200])
-        
-        data = json.loads(content)
-        
-        # Debug logging
-        logger.debug("OpenAI response structure: %s", list(data.keys()) if isinstance(data, dict) else type(data))
-        
-        output = data.get("output", [])
-        
-        # If output is empty, check if the data itself is the array
-        if not output and isinstance(data, list):
-            output = data
-        elif not output and isinstance(data, dict):
-            # Check for alternative keys (OpenAI uses different response formats)
-            output = data.get("memes", data.get("results", data.get("meme_options", data.get("options", data.get("examples", [])))))
-        
-        if not output or not isinstance(output, list):
-            logger.error("OpenAI returned empty or invalid output array. Data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
-            return None
-        
-        # Validate each meme object has required fields
-        valid_memes = []
-        for meme in output:
-            if not isinstance(meme, dict):
-                logger.warning("Skipping invalid meme object: %s", meme)
-                continue
-            
-            # Check for required fields with flexible naming (OpenAI uses different field names)
-            meme_id = meme.get("meme_id") or meme.get("id") or meme.get("template_id")
-            meme_name = meme.get("meme_name") or meme.get("name") or meme.get("template_name")
-            meme_text = (meme.get("meme_text") or meme.get("text") or meme.get("captions") or 
-                        meme.get("text_fields") or meme.get("input_texts") or 
-                        meme.get("fields") or meme.get("output"))
-            
-            # If we have template_name but no ID, try to look it up
-            if meme_id is None and meme_name:
-                try:
-                    meme_data_obj = json.loads(load_meme_data())
-                    # Try exact match first
-                    template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
-                    if template:
-                        meme_id = template["id"]
-                        logger.debug("Looked up template ID %d for name '%s'", meme_id, meme_name)
-                except Exception as e:
-                    logger.warning("Failed to look up template ID for name '%s': %s", meme_name, e)
-            
-            if meme_id is None or not meme_text:
-                logger.warning("Skipping incomplete meme object (missing ID or text): %s", meme)
-                continue
-            
-            # For OpenAI, we might need to look up the template name if not provided
-            if not meme_name:
-                # Try to get template name from the meme data if we have template_id
-                try:
-                    meme_data_obj = json.loads(load_meme_data())
-                    template = next((t for t in meme_data_obj if t["id"] == int(meme_id)), None)
-                    meme_name = template["name"] if template else f"Template {meme_id}"
-                except:
-                    meme_name = f"Template {meme_id}"
-            
-            # Normalize the meme object
-            normalized_meme = {
-                "meme_id": int(meme_id),
-                "meme_name": str(meme_name),
-                "meme_text": list(meme_text) if isinstance(meme_text, list) else [str(meme_text)],
-                "reasoning": meme.get("reasoning", "Generated by OpenAI")
-            }
-            valid_memes.append(normalized_meme)
-        
-        if not valid_memes:
-            logger.error("No valid memes found in OpenAI response")
-            return None
-        
-        logger.info("OpenAI generated %d valid memes", len(valid_memes))
-        return valid_memes
-        
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse OpenAI JSON. Error: %s, Content: %s", e, content[:500])
-        return None
-    except Exception as exc:
-        logger.error("OpenAI caption generation failed: %s", exc)
-        return None
 
 
 # ── Gemini ────────────────────────────────────────────────────────────────────
@@ -291,7 +134,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
         config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            max_output_tokens=2048,
+            max_output_tokens=4096,     # increased to prevent JSON truncation
             temperature=1.0,
             response_mime_type="application/json",
             response_schema=MemeList,
@@ -303,7 +146,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
             try:
                 # Use async generation
                 resp = await gemini_client.aio.models.generate_content(
-                    model="gemini-3-flash-preview",
+                    model="gemini-2.5-flash",
                     contents=prompt,
                     config=config
                 )
@@ -341,7 +184,28 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                         continue
                     return None
                 
-                data = json.loads(raw)
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError as json_err:
+                    # Try to recover from incomplete JSON by finding the last complete meme
+                    logger.warning("Failed to parse JSON on attempt %d: %s. Attempting recovery...", attempt + 1, json_err)
+                    # Find the last complete meme object by looking for the last closing brace
+                    last_brace = raw.rfind('},')
+                    if last_brace > 0:
+                        recovered = raw[:last_brace + 1] + ']\n}'
+                        try:
+                            data = json.loads(recovered)
+                            logger.info("Successfully recovered partial JSON response")
+                        except json.JSONDecodeError:
+                            if attempt < max_retries:
+                                logger.info("Recovery failed, retrying (attempt %d of %d)...", attempt + 2, max_retries + 1)
+                                continue
+                            raise
+                    else:
+                        if attempt < max_retries:
+                            logger.info("Could not recover incomplete JSON, retrying (attempt %d of %d)...", attempt + 2, max_retries + 1)
+                            continue
+                        raise
                 
                 # Handle different response formats
                 if isinstance(data, dict):
@@ -376,7 +240,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                     # If we have template_name but no ID, try to look it up
                     if meme_id is None and meme_name:
                         try:
-                            meme_data_obj = json.loads(load_meme_data())
+                            meme_data_obj = get_meme_data_list()  # in-memory, no disk/json overhead
                             # Try exact match first
                             template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
                             if template:
@@ -427,63 +291,24 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
         return None
 
 
+async def _generate_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
+    """Generate captions using Gemini."""
+    return await generate_meme_captions_with_gemini(prompt)
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 async def get_caption_generator(provider: Optional[str] = None):
-    """Return a robust caption generator with built-in provider failover."""
-    requested_provider = (provider or settings.ai_provider).lower()
-
+    """Return a caption generator using Gemini."""
+    
     async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
-        # 1. Try requested provider first
-        if requested_provider == AIProvider.GEMINI.value and settings.has_gemini:
-            logger.info("Attempting caption generation with Gemini...")
-            result = await generate_meme_captions_with_gemini(prompt)
-            if result and len(result) > 0:
-                logger.info("Gemini generation successful")
-                return result
-            logger.warning("Gemini failed or returned empty results, falling back to OpenAI...")
-
-        elif requested_provider == AIProvider.OPENAI.value and settings.has_openai:
-            logger.info("Attempting caption generation with OpenAI...")
-            result = await generate_meme_captions(prompt)
-            if result and len(result) > 0:
-                logger.info("OpenAI generation successful")
-                return result
-            logger.warning("OpenAI failed or returned empty results, falling back to Gemini...")
-
-        # 2. Try fallback provider if primary failed
-        if requested_provider == AIProvider.GEMINI.value and settings.has_openai:
-            logger.info("Attempting fallback to OpenAI...")
-            result = await generate_meme_captions(prompt)
-            if result and len(result) > 0:
-                logger.info("OpenAI fallback successful")
-                return result
-            logger.error("Both Gemini and OpenAI failed")
-        
-        elif requested_provider == AIProvider.OPENAI.value and settings.has_gemini:
-            logger.info("Attempting fallback to Gemini...")
-            result = await generate_meme_captions_with_gemini(prompt)
-            if result and len(result) > 0:
-                logger.info("Gemini fallback successful")
-                return result
-            logger.error("Both OpenAI and Gemini failed")
-
-        # 3. If no provider was configured for the requested type, try any available
-        if not settings.has_gemini and not settings.has_openai:
-            logger.error("No AI providers configured")
+        try:
+            # 20-second timeout guard on overall generation
+            return await asyncio.wait_for(generate_meme_captions_with_gemini(prompt), timeout=20.0)
+        except asyncio.TimeoutError:
+            logger.error("AI caption generation timed out after 20 seconds")
             return None
-
-        if requested_provider == AIProvider.GEMINI.value and not settings.has_gemini:
-            if settings.has_openai:
-                logger.warning("Gemini not configured, using OpenAI instead")
-                return await generate_meme_captions(prompt)
-        
-        if requested_provider == AIProvider.OPENAI.value and not settings.has_openai:
-            if settings.has_gemini:
-                logger.warning("OpenAI not configured, using Gemini instead")
-                return await generate_meme_captions_with_gemini(prompt)
-
-        logger.error("All caption generation attempts failed")
-        return None
+        except Exception as exc:
+            logger.error("Caption generation failed: %s", exc)
+            return None
 
     return robust_generator

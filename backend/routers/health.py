@@ -5,7 +5,6 @@ This module provides comprehensive health monitoring for:
 - Application status
 - Database connectivity
 - Redis connectivity and queue status
-- OpenAI API connectivity
 - Worker queue health
 - System resource monitoring
 """
@@ -20,7 +19,6 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 import redis.asyncio as redis
-from openai import AsyncOpenAI
 
 from core.config import settings
 from db.session import AsyncSessionLocal, engine
@@ -34,7 +32,6 @@ class HealthChecker:
     """Centralized health checking service"""
     
     def __init__(self):
-        self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
         self._redis_client: Optional[redis.Redis] = None
     
     async def get_redis_client(self) -> redis.Redis:
@@ -216,48 +213,6 @@ class HealthChecker:
             "error_type": "retry_exhausted"
         }
     
-    async def check_openai_api(self) -> Dict[str, Any]:
-        """Check OpenAI API connectivity"""
-        start_time = time.time()
-        
-        if not self.openai_client:
-            return {
-                "status": "not_configured",
-                "response_time_ms": 0,
-                "error": "OpenAI API key not configured"
-            }
-        
-        try:
-            # Test with a minimal request
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=1,
-                temperature=0
-            )
-            
-            response_time = round((time.time() - start_time) * 1000, 2)
-            
-            return {
-                "status": "healthy",
-                "response_time_ms": response_time,
-                "model": response.model,
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                    "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-                    "total_tokens": response.usage.total_tokens if response.usage else 0
-                }
-            }
-            
-        except Exception as e:
-            response_time = round((time.time() - start_time) * 1000, 2)
-            return {
-                "status": "unhealthy",
-                "response_time_ms": response_time,
-                "error": str(e),
-                "error_type": "api_error"
-            }
-    
     async def check_worker_queue(self) -> Dict[str, Any]:
         """Check ARQ worker queue health"""
         start_time = time.time()
@@ -397,13 +352,12 @@ async def detailed_health():
     # Run all health checks concurrently
     database_task = health_checker.check_database()
     redis_task = health_checker.check_redis()
-    openai_task = health_checker.check_openai_api()
     worker_task = health_checker.check_worker_queue()
     system_task = health_checker.check_system_resources()
     
     # Wait for all checks to complete
-    database_health, redis_health, openai_health, worker_health, system_health = await asyncio.gather(
-        database_task, redis_task, openai_task, worker_task, system_task,
+    database_health, redis_health, worker_health, system_health = await asyncio.gather(
+        database_task, redis_task, worker_task, system_task,
         return_exceptions=True
     )
     
@@ -419,7 +373,6 @@ async def detailed_health():
     
     database_health = safe_result(database_health, "database")
     redis_health = safe_result(redis_health, "redis")
-    openai_health = safe_result(openai_health, "openai")
     worker_health = safe_result(worker_health, "worker")
     system_health = safe_result(system_health, "system")
     
@@ -427,7 +380,6 @@ async def detailed_health():
     all_statuses = [
         database_health.get("status"),
         redis_health.get("status"),
-        openai_health.get("status"),
         worker_health.get("status"),
         system_health.get("status")
     ]
@@ -452,7 +404,6 @@ async def detailed_health():
         "services": {
             "database": database_health,
             "redis": redis_health,
-            "openai_api": openai_health,
             "worker_queue": worker_health,
             "system_resources": system_health
         }
@@ -505,24 +456,6 @@ async def redis_health():
     
     return result
 
-
-@router.get("/health/openai")
-async def openai_health():
-    """OpenAI API-specific health check"""
-    result = await health_checker.check_openai_api()
-    
-    if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=result
-        )
-    elif result["status"] == "not_configured":
-        raise HTTPException(
-            status_code=status.HTTP_424_FAILED_DEPENDENCY,
-            detail=result
-        )
-    
-    return result
 
 
 @router.get("/health/worker")

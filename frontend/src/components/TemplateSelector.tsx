@@ -78,16 +78,16 @@ export function TemplateSelector({
       const response = await fetch('/api/memes/templates/sync-imgflip', {
         method: 'POST',
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to sync Imgflip templates');
       }
-      
+
       const data = await response.json();
       const changed = data.stats.created + data.stats.updated;
       const skipped = data.stats.skipped ? ` (${data.stats.skipped} curated duplicates skipped)` : '';
       toast.success(`Synced ${changed} templates from Imgflip${skipped}!`);
-      
+
       // Refresh templates
       await fetchTemplates(sourceFilter);
     } catch (err) {
@@ -106,43 +106,39 @@ export function TemplateSelector({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
           <button
             onClick={() => setSourceFilter('all')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              sourceFilter === 'all'
+            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'all'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             All
           </button>
           <button
             onClick={() => setSourceFilter('local')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              sourceFilter === 'local'
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'local'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             <HardDrive size={14} />
             Local
           </button>
           <button
             onClick={() => setSourceFilter('database')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              sourceFilter === 'database'
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'database'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             <Database size={14} />
             Database
           </button>
           <button
             onClick={() => setSourceFilter('imgflip')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              sourceFilter === 'imgflip'
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'imgflip'
                 ? 'bg-acid text-black'
                 : 'bg-surface-2 text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             <Globe size={14} />
             Imgflip
@@ -208,11 +204,10 @@ export function TemplateSelector({
                 <motion.button
                   key={template.id}
                   onClick={() => onSelectTemplate(template)}
-                  className={`group relative rounded-lg overflow-hidden border-2 transition-all aspect-square ${
-                    selectedTemplateId === template.id
+                  className={`group relative rounded-lg overflow-hidden border-2 transition-all aspect-square ${selectedTemplateId === template.id
                       ? 'border-acid ring-2 ring-acid'
                       : 'border-border hover:border-acid/50'
-                  }`}
+                    }`}
                   whileHover={{ scale: 1.05 }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}

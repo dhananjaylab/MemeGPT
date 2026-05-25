@@ -128,11 +128,10 @@ export function MemeEditor({
             <button
               key={color.value}
               onClick={() => handleColorChange(color.value)}
-              className={`p-3 rounded-lg border-2 transition-all ${
-                selectedText.color === color.value
-                  ? 'border-acid'
-                  : 'border-border hover:border-border-light'
-              }`}
+              className={`p-3 rounded-lg border-2 transition-all ${selectedText.color === color.value
+                ? 'border-acid'
+                : 'border-border hover:border-border-light'
+                }`}
               style={{ backgroundColor: color.value }}
               title={color.name}
             >
@@ -173,11 +172,10 @@ export function MemeEditor({
           <button
             key={size}
             onClick={() => onStyleUpdate?.(selectedTextId!, { fontSize: size })}
-            className={`px-3 py-1 text-sm rounded border transition-all ${
-              selectedText.fontSize === size
-                ? 'bg-acid text-black border-acid'
-                : 'border-border hover:border-acid/50 text-secondary'
-            }`}
+            className={`px-3 py-1 text-sm rounded border transition-all ${selectedText.fontSize === size
+              ? 'bg-acid text-black border-acid'
+              : 'border-border hover:border-acid/50 text-secondary'
+              }`}
           >
             {size}px
           </button>
@@ -188,11 +186,10 @@ export function MemeEditor({
       <div className="space-y-2">
         <button
           onClick={handleUppercaseToggle}
-          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
-            selectedText.uppercase
-              ? 'bg-acid/20 border-acid text-acid'
-              : 'border-border hover:border-acid/50 text-secondary'
-          }`}
+          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${selectedText.uppercase
+            ? 'bg-acid/20 border-acid text-acid'
+            : 'border-border hover:border-acid/50 text-secondary'
+            }`}
         >
           <Settings2 size={16} />
           {selectedText.uppercase ? 'UPPERCASE (On)' : 'Uppercase (Off)'}
@@ -200,11 +197,10 @@ export function MemeEditor({
 
         <button
           onClick={handleStrokeToggle}
-          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
-            selectedText.stroke
-              ? 'bg-acid/20 border-acid text-acid'
-              : 'border-border hover:border-acid/50 text-secondary'
-          }`}
+          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${selectedText.stroke
+            ? 'bg-acid/20 border-acid text-acid'
+            : 'border-border hover:border-acid/50 text-secondary'
+            }`}
         >
           <Settings2 size={16} />
           Text Stroke: {selectedText.stroke ? 'On' : 'Off'}
@@ -212,11 +208,10 @@ export function MemeEditor({
 
         <button
           onClick={handleAutoResizeToggle}
-          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${
-            (selectedText.autoResize ?? true)
-              ? 'bg-acid/20 border-acid text-acid'
-              : 'border-border hover:border-acid/50 text-secondary'
-          }`}
+          className={`w-full px-4 py-2 rounded-lg border transition-all text-sm font-medium flex items-center justify-center gap-2 ${(selectedText.autoResize ?? true)
+            ? 'bg-acid/20 border-acid text-acid'
+            : 'border-border hover:border-acid/50 text-secondary'
+            }`}
         >
           <Settings2 size={16} />
           Auto Resize: {(selectedText.autoResize ?? true) ? 'On' : 'Off'}

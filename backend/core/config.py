@@ -13,12 +13,9 @@ class Settings(BaseSettings):
     arq_redis_settings: str = Field(default="", alias="ARQ_REDIS_SETTINGS")
     arq_queue_name: str = Field(default="arq:queue", alias="ARQ_QUEUE_NAME")
     
-    # OpenAI
-    openai_api_key: str = ""
-    
     # Google Gemini
     gemini_api_key: str = ""
-    ai_provider: str = Field(default="openai", alias="AI_PROVIDER")  # "openai", "gemini", or "both"
+    ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" only
     
     # Imgflip API
     imgflip_username: str = ""
@@ -114,11 +111,6 @@ class Settings(BaseSettings):
     def has_gemini(self) -> bool:
         """Check if Gemini API key is configured"""
         return bool(self.gemini_api_key)
-    
-    @property
-    def has_openai(self) -> bool:
-        """Check if OpenAI API key is configured"""
-        return bool(self.openai_api_key)
 
 
 settings = Settings()

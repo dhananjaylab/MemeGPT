@@ -94,16 +94,16 @@ export function Gallery() {
 
   const filtered = search.trim()
     ? memes.filter(
-        (m) =>
-          m.template_name.toLowerCase().includes(search.toLowerCase()) ||
-          m.prompt.toLowerCase().includes(search.toLowerCase()) ||
-          m.meme_text?.some((t) => t.toLowerCase().includes(search.toLowerCase())),
-      )
+      (m) =>
+        m.template_name.toLowerCase().includes(search.toLowerCase()) ||
+        m.prompt.toLowerCase().includes(search.toLowerCase()) ||
+        m.meme_text?.some((t) => t.toLowerCase().includes(search.toLowerCase())),
+    )
     : memes;
 
   const sortTabs: { id: SortMode; label: string; Icon: React.ElementType }[] = [
-    { id: 'recent',   label: 'Recent',   Icon: Clock },
-    { id: 'top',      label: 'Top',      Icon: Flame },
+    { id: 'recent', label: 'Recent', Icon: Clock },
+    { id: 'top', label: 'Top', Icon: Flame },
     { id: 'trending', label: 'Trending', Icon: Zap },
   ];
 
@@ -125,17 +125,16 @@ export function Gallery() {
           <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
             {([
               { id: 'all', label: 'All', Icon: Globe },
-              { id: 'my',  label: 'Mine', Icon: User },
+              { id: 'my', label: 'Mine', Icon: User },
             ] as const).map(({ id, label, Icon }) => (
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
                 disabled={id === 'my' && !isAuthenticated}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${
-                  viewMode === id
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${viewMode === id
                     ? 'bg-acid text-black font-semibold shadow-glow-sm'
                     : 'text-secondary hover:text-acid'
-                } disabled:opacity-40`}
+                  } disabled:opacity-40`}
               >
                 <Icon size={12} />
                 {label}
@@ -150,11 +149,10 @@ export function Gallery() {
                 key={id}
                 onClick={() => setSort(id)}
                 aria-pressed={sort === id}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${
-                  sort === id
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all ${sort === id
                     ? 'bg-acid text-black font-semibold shadow-glow-sm'
                     : 'text-secondary hover:text-acid hover:bg-acid/10'
-                }`}
+                  }`}
               >
                 <Icon size={12} />
                 {label}

@@ -18,7 +18,7 @@ export interface QuickMemeRequest {
   prompt?: string;
   template_id?: number;
   captions?: string[];
-  ai_provider?: 'openai' | 'gemini';
+  ai_provider?: 'gemini';
 }
 
 export interface QuickMemeResponse {

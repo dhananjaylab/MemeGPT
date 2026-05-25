@@ -45,9 +45,9 @@ type Mode = 'quick' | 'auto' | 'manual';
 // ─── Mode tab config ──────────────────────────────────────────────────────────
 
 const MODES: { id: Mode; label: string; icon: typeof Zap; badge?: string }[] = [
-  { id: 'quick',  label: 'Quick',   icon: Zap,   badge: '⚡ Instant' },
-  { id: 'auto',   label: 'AI Mode', icon: Sparkles },
-  { id: 'manual', label: 'Editor',  icon: Edit3 },
+  { id: 'quick', label: 'Quick', icon: Zap, badge: '⚡ Instant' },
+  { id: 'auto', label: 'AI Mode', icon: Sparkles },
+  { id: 'manual', label: 'Editor', icon: Edit3 },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -255,11 +255,10 @@ export function MemeGenerator({ topic }: MemeGeneratorProps) {
           <button
             key={id}
             onClick={() => setMode(id)}
-            className={`flex-1 py-2.5 px-3 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-              mode === id
+            className={`flex-1 py-2.5 px-3 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${mode === id
                 ? 'bg-acid text-black shadow-sm'
                 : 'text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             <Icon size={15} />
             {label}

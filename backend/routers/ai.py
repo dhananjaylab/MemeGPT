@@ -18,7 +18,7 @@ router = APIRouter()
 class AISuggestRequest(BaseModel):
     """Request for AI-generated meme suggestions"""
     prompt: str
-    provider: Optional[str] = None  # "openai", "gemini", or None for default
+    provider: Optional[str] = None  # "gemini" or None for default
 
 
 class AIMemeOption(BaseModel):
@@ -47,11 +47,10 @@ async def get_ai_suggestions(
     Get AI-generated meme suggestions for a prompt.
     
     This is a backend proxy endpoint for Gemini API calls (secure, no exposed keys).
-    For development, you can use this with either OpenAI or Gemini.
     
     Args:
         prompt: User's natural language prompt for meme generation
-        provider: Optional provider override ("openai" or "gemini")
+        provider: Optional provider override ("gemini" or None for default)
     
     Returns:
         List of meme suggestions with template IDs and captions
@@ -67,25 +66,14 @@ async def get_ai_suggestions(
     # Determine provider
     provider = body.provider or settings.ai_provider
     provider = provider.lower()
-    
     # Validate provider availability
     if provider == AIProvider.GEMINI.value and not settings.has_gemini:
         raise HTTPException(
             status_code=503, 
             detail="Gemini AI provider not configured. Please set GEMINI_API_KEY."
         )
-    elif provider == AIProvider.OPENAI.value and not settings.has_openai:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI provider not configured. Please set OPENAI_API_KEY."
-        )
-    elif not settings.has_openai and not settings.has_gemini:
-        raise HTTPException(
-            status_code=503,
-            detail="No AI provider configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
-        )
     
-    # Generate suggestions using unified generator with failover
+    # Generate suggestions using unified generator
     try:
         generator = await get_caption_generator(provider)
         suggestions = await generator(body.prompt)
@@ -129,10 +117,6 @@ async def get_ai_status():
     Useful for frontend to determine which features are available.
     """
     return {
-        "openai": {
-            "available": settings.has_openai,
-            "provider": "openai"
-        },
         "gemini": {
             "available": settings.has_gemini,
             "provider": "gemini"

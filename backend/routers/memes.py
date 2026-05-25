@@ -32,6 +32,8 @@ from services.cache import (
     get_cached_captions,
     set_cached_captions,
     set_cached_meme_url,
+    get_cached_meme_metadata,
+    set_cached_meme_metadata,
 )
 from services.compositor import overlay_text_on_image_async
 from services.imgflip import imgflip_service
@@ -54,7 +56,7 @@ router = APIRouter()
 
 class GenerateMemeRequest(BaseModel):
     prompt: str
-    ai_provider: Optional[str] = "openai"
+    ai_provider: Optional[str] = "gemini"
     generation_mode: Optional[str] = "auto"
     template_id: Optional[int] = None
     captions: Optional[List[str]] = None
@@ -76,7 +78,7 @@ class QuickMemeRequest(BaseModel):
     prompt: Optional[str] = None
     template_id: Optional[int] = None
     captions: Optional[List[str]] = None
-    ai_provider: Optional[str] = "openai"
+    ai_provider: Optional[str] = "gemini"
 
 
 class QuickMemeResponse(BaseModel):
@@ -156,19 +158,19 @@ async def _compose_and_upload(
                 template_dict["id"], imgflip_exc
             )
             # Fallback to local compositor
-            image_path = await overlay_text_on_image_async(template_dict, texts)
-            object_key = f"memes/{uuid4()}.png"
-            upload_result = await upload_to_r2(image_path, object_key)
+            image_buffer = await overlay_text_on_image_async(template_dict, texts)
+            object_key = f"memes/{uuid4()}.webp"
+            upload_result = await upload_to_r2(image_buffer, object_key)
             image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
             
             if not image_url:
                 raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
     else:
         # Use local compositor for non-Imgflip templates
-        image_path = await overlay_text_on_image_async(template_dict, texts)
+        image_buffer = await overlay_text_on_image_async(template_dict, texts)
 
-        object_key = f"memes/{uuid4()}.png"
-        upload_result = await upload_to_r2(image_path, object_key)
+        object_key = f"memes/{uuid4()}.webp"
+        upload_result = await upload_to_r2(image_buffer, object_key)
         image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
         if not image_url:
@@ -186,6 +188,16 @@ async def _compose_and_upload(
     )
     db.add(meme)
     await db.commit()
+    
+    # Cache the metadata to eliminate DB queries on future cache hits
+    meme_metadata = {
+        "meme_id": meme.id,
+        "template_name": meme.template_name,
+        "image_url": image_url,
+    }
+    await set_cached_meme_metadata(template_dict["id"], texts, meme_metadata)
+    await set_cached_meme_url(template_dict["id"], texts, image_url)
+    
     return meme
 
 
@@ -205,9 +217,9 @@ async def generate_meme(
     if len(body.prompt) > 1000:
         raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
 
-    ai_provider = (body.ai_provider or "openai").lower()
-    if ai_provider not in {"openai", "gemini"}:
-        raise HTTPException(status_code=400, detail="ai_provider must be 'openai' or 'gemini'")
+    ai_provider = (body.ai_provider or "gemini").lower()
+    if ai_provider not in {"gemini"}:
+        raise HTTPException(status_code=400, detail="ai_provider must be 'gemini'")
 
     generation_mode = (body.generation_mode or "auto").lower()
     if generation_mode not in {"auto", "manual"}:
@@ -252,24 +264,17 @@ async def generate_meme_quick(
         texts = [c.strip() for c in body.captions]
         prompt = body.prompt or "manual"
 
-        # Check meme image cache
-        cached_url = await get_cached_meme_url(template_id, texts)
-        if cached_url:
-            res = await db.execute(
-                select(GeneratedMeme)
-                .where(GeneratedMeme.image_url == cached_url)
-                .limit(1)
+        # Try metadata cache first (no DB query needed)
+        cached_meta = await get_cached_meme_metadata(template_id, texts)
+        if cached_meta:
+            return QuickMemeResponse(
+                meme_id=cached_meta["meme_id"],
+                image_url=cached_meta["image_url"],
+                template_name=cached_meta["template_name"],
+                meme_text=texts,
+                cache_hit=True,
+                generation_time_ms=int((time.monotonic() - t0) * 1000),
             )
-            existing = res.scalar_one_or_none()
-            if existing:
-                return QuickMemeResponse(
-                    meme_id=existing.id,
-                    image_url=cached_url,
-                    template_name=existing.template_name,
-                    meme_text=texts,
-                    cache_hit=True,
-                    generation_time_ms=int((time.monotonic() - t0) * 1000),
-                )
     elif body.prompt:
         prompt = body.prompt.strip()
         if not prompt:
@@ -281,23 +286,17 @@ async def generate_meme_quick(
             template_id = int(best.get("meme_id", best.get("id")))
             texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
 
-            cached_url = await get_cached_meme_url(template_id, texts)
-            if cached_url:
-                res = await db.execute(
-                    select(GeneratedMeme)
-                    .where(GeneratedMeme.image_url == cached_url)
-                    .limit(1)
+            # Try metadata cache first (no DB query needed)
+            cached_meta = await get_cached_meme_metadata(template_id, texts)
+            if cached_meta:
+                return QuickMemeResponse(
+                    meme_id=cached_meta["meme_id"],
+                    image_url=cached_meta["image_url"],
+                    template_name=cached_meta["template_name"],
+                    meme_text=texts,
+                    cache_hit=True,
+                    generation_time_ms=int((time.monotonic() - t0) * 1000),
                 )
-                existing = res.scalar_one_or_none()
-                if existing:
-                    return QuickMemeResponse(
-                        meme_id=existing.id,
-                        image_url=cached_url,
-                        template_name=existing.template_name,
-                        meme_text=texts,
-                        cache_hit=True,
-                        generation_time_ms=int((time.monotonic() - t0) * 1000),
-                    )
     else:
         raise HTTPException(
             status_code=400,
@@ -305,7 +304,7 @@ async def generate_meme_quick(
         )
 
     # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
-    ai_provider = (body.ai_provider or "openai").lower()
+    ai_provider = (body.ai_provider or "gemini").lower()
     generation_mode = "manual" if (body.template_id is not None and body.captions) else "auto"
 
     job_id = await enqueue_meme_generation(

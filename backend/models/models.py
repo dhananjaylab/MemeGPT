@@ -87,7 +87,7 @@ class MemeJob(Base):
     id: str = Column(String, primary_key=True)
     user_id: Optional[str] = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     prompt: str = Column(Text, nullable=False)
-    ai_provider: str = Column(String, default="openai", nullable=False, index=True)
+    ai_provider: str = Column(String, default="gemini", nullable=False, index=True)
     generation_mode: str = Column(String, default="auto", nullable=False, index=True)
     manual_template_id: Optional[int] = Column(Integer, nullable=True)
     manual_captions: Optional[List[str]] = Column(JSON, nullable=True)

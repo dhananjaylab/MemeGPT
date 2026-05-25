@@ -1,17 +1,19 @@
 
+import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './context/AuthContext';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { Home } from './pages/Home';
-import { Gallery } from './pages/Gallery';
-import { Dashboard } from './pages/Dashboard';
-import { AuthCallback } from './pages/AuthCallback';
-import { Synthesize } from './pages/Synthesize';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
+const Gallery = lazy(() => import('./pages/Gallery').then(m => ({ default: m.Gallery })));
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const AuthCallback = lazy(() => import('./pages/AuthCallback').then(m => ({ default: m.AuthCallback })));
+const Synthesize = lazy(() => import('./pages/Synthesize').then(m => ({ default: m.Synthesize })));
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -19,17 +21,35 @@ function AnimatedRoutes() {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<Home />} />
-        <Route path="/synthesize" element={<Synthesize />} />
-        <Route path="/gallery" element={<Gallery />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route 
-          path="/dashboard" 
+        <Route path="/" element={
+          <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading...</div>}>
+            <Home />
+          </Suspense>
+        } />
+        <Route path="/synthesize" element={
+          <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading...</div>}>
+            <Synthesize />
+          </Suspense>
+        } />
+        <Route path="/gallery" element={
+          <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading...</div>}>
+            <Gallery />
+          </Suspense>
+        } />
+        <Route path="/auth/callback" element={
+          <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading...</div>}>
+            <AuthCallback />
+          </Suspense>
+        } />
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <Suspense fallback={<div className="p-6 flex justify-center text-muted">Loading...</div>}>
+                <Dashboard />
+              </Suspense>
             </ProtectedRoute>
-          } 
+          }
         />
       </Routes>
     </AnimatePresence>
@@ -48,7 +68,7 @@ function App() {
             </main>
             <Footer />
           </div>
-          <Toaster 
+          <Toaster
             position="bottom-right"
             toastOptions={{
               style: {

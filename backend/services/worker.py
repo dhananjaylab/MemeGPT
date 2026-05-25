@@ -51,30 +51,26 @@ async def close_arq_pool():
 async def enqueue_meme_generation(
     prompt: str,
     user: Optional[User] = None,
-    ai_provider: str = "openai",
+    ai_provider: str = "gemini",
     generation_mode: str = "auto",
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,
 ) -> str:
     """Enqueue a meme generation job"""
-    print("[DEBUG] === enqueue_meme_generation CALLED ===")
     job_id = str(uuid4())
     user_id = user.id if user else None
-    
-    print(f"[DEBUG] job_id={job_id}, user_id={user_id}")
+
     logger.info(
-        f"Enqueueing meme generation job {job_id} for user {user_id} with "
-        f"provider={ai_provider} mode={generation_mode}"
+        "Enqueueing meme generation job %s for user %s provider=%s mode=%s",
+        job_id, user_id, ai_provider, generation_mode,
     )
-    
+
     try:
-        print("[DEBUG] About to create job in database...")
         # Ensure database engine is initialized
         db_session._init_engine()
-        print("[DEBUG] Database engine initialized")
+
         # Create job record in database
         async with db_session.AsyncSessionLocal() as db:
-            print("[DEBUG] Got database session")
             job = MemeJob(
                 id=job_id,
                 user_id=user_id,
@@ -83,62 +79,35 @@ async def enqueue_meme_generation(
                 generation_mode=generation_mode,
                 manual_template_id=manual_template_id,
                 manual_captions=manual_captions,
-                status="pending"
+                status="pending",
             )
-            print("[DEBUG] Created MemeJob object")
             db.add(job)
-            print("[DEBUG] Added job to session")
             await db.commit()
-            print(f"[DEBUG] Job {job_id} committed to database")
-            logger.info(f"Job {job_id} created in database")
-        
-        print("[DEBUG] Database operations complete, now enqueueing with ARQ...")
+            logger.info("Job %s created in database", job_id)
+
         # Enqueue job with ARQ
-        try:
-            print(f"[DEBUG] About to get ARQ pool...")
-            pool = await get_arq_pool()
-            print(f"[DEBUG] Got ARQ pool: {pool}")
-            print(f"[DEBUG] Pool type: {type(pool)}")
-            print(f"[DEBUG] Has enqueue_job: {hasattr(pool, 'enqueue_job')}")
-            
-            if pool is None:
-                raise Exception("ARQ pool is None")
-            
-            # Check if enqueue_job method exists and is callable
-            enqueue_method = getattr(pool, 'enqueue_job', None)
-            print(f"[DEBUG] enqueue_job method: {enqueue_method}")
-            print(f"[DEBUG] enqueue_job callable: {callable(enqueue_method)}")
-            
-            if enqueue_method is None:
-                raise Exception("enqueue_job method not found on pool")
-            
-            print(f"[DEBUG] About to call enqueue_job...")
-            # Use function name string for ARQ enqueue_job
-            result = await pool.enqueue_job(
-                'process_meme_generation',
-                job_id,
-                user_id,
-                prompt,
-                ai_provider,
-                generation_mode,
-                manual_template_id,
-                manual_captions,
-                _job_id=job_id,
-                _queue_name=settings.arq_queue_name,
-            )
-            
-            print(f"[DEBUG] Job {job_id} enqueued successfully with result: {result}")
-            logger.info(f"Job {job_id} enqueued successfully with result: {result}")
-            return job_id
-        except Exception as e:
-            print(f"[DEBUG] Exception caught: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            logger.error(f"Failed to enqueue job {job_id}: {e}", exc_info=True)
-            raise
-        
+        pool = await get_arq_pool()
+        if pool is None:
+            raise Exception("ARQ pool is None")
+
+        result = await pool.enqueue_job(
+            'process_meme_generation',
+            job_id,
+            user_id,
+            prompt,
+            ai_provider,
+            generation_mode,
+            manual_template_id,
+            manual_captions,
+            _job_id=job_id,
+            _queue_name=settings.arq_queue_name,
+        )
+
+        logger.info("Job %s enqueued successfully: %s", job_id, result)
+        return job_id
+
     except Exception as e:
-        logger.error(f"Error enqueueing job {job_id}: {e}")
+        logger.error("Error enqueueing job %s: %s", job_id, e)
         raise Exception(f"Failed to enqueue job: {str(e)}")
 
 async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:

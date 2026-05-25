@@ -33,10 +33,10 @@ Generate hilarious memes with ease using MemeGPT! This application leverages the
 
 ## 1. Introduction & Features
 
-MemeGPT leverages OpenAI (GPT-4o) and Google Gemini models to create intelligent memes. It automatically selects templates, generates captions, and handles image synthesis.
+MemeGPT leverages Google Gemini to create intelligent memes. It automatically selects templates, generates captions, and handles image synthesis.
 
 ### ✨ Key Features
-- **Multi-Model AI**: Failover between OpenAI (GPT-4o) and Google Gemini for robust caption generation.
+- **AI-Powered Captions**: Google Gemini for intelligent caption generation.
 - **Imgflip Integration**: Access to 100+ popular templates with local fallback capabilities.
 - **Manual Editor**: Precise, full control over text placement, styling, and formatting.
 - **Event-Driven Architecture**: Fast synchronous caching (<10ms) combined with ARQ background worker offloading and real-time Server-Sent Events (SSE) streaming for heavy generation tasks.
@@ -81,7 +81,7 @@ MemeGPT/
 
 ### Prerequisites
 - **Runtimes**: Python 3.10+, Node.js 18+, Docker, Git.
-- **API Keys**: OpenAI, Google Gemini, Stripe (Optional), Cloudflare R2 (Optional).
+- **API Keys**: Google Gemini, Stripe (Optional), Cloudflare R2 (Optional).
 
 ### Quick Setup (Local)
 
@@ -132,7 +132,7 @@ This will automatically spin up the FastAPI backend, ARQ worker, Redis, PostgreS
 Configure your environment variables in `backend/.env`. See `backend/.env.example` for all available options.
 - `DATABASE_URL`: PostgreSQL connection string.
 - `REDIS_URL`: Redis connection string.
-- `AI_PROVIDER`: `openai`, `gemini`, or `both` (enables automatic failover).
+- `AI_PROVIDER`: `gemini` (Google Gemini is the only supported provider).
 - `RATE_LIMIT_ENABLED`: Set to `true` to enable tiered rate limits.
 
 ### Rate Limit Tiers
@@ -208,7 +208,7 @@ Monitor system resources to ensure CPU (<80%) and Memory (<85%) remain stable, a
 ### Common Issues & Solutions
 - **AI Formatting Failures**: Automatic field mapping and fallback parsing are handled transparently in `meme_ai.py`.
 - **Template 404s**: Ensure Imgflip credentials are valid or verify that local fallback templates exist in `backend/public/frames`.
-- **Provider Outages**: The system automatically fails over between OpenAI and Google Gemini if one API experiences downtime.
+- **Provider Issues**: Ensure Google Gemini API key is valid and API quota is available.
 - **Rate Limited**: Check the `X-RateLimit-Remaining` headers in API responses and wait for the duration specified in `Retry-After`.
 
 ### Disaster Recovery
