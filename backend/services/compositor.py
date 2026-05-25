@@ -33,8 +33,25 @@ FONT_FOLDER     = ROOT_DIRECTORY / "public" / "fonts"
 OUTPUT_FOLDER   = ROOT_DIRECTORY / "public" / "output"
 LINE_HEIGHT_MUL = 1.35   # slightly tighter than v1 — feels more meme-y
 
+# ── Font Cache ───────────────────────────────────────────────────────────────
+# Eliminates repeated disk I/O and font parsing (~5-10ms per render)
+_FONT_CACHE: Dict[Tuple[str, int], ImageFont.FreeTypeFont] = {}
+
 
 # ── Tiny helpers ─────────────────────────────────────────────────────────────
+
+def _get_cached_font(font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
+    """Get font from cache or load from disk (cached for reuse)."""
+    key = (font_name, font_size)
+    if key not in _FONT_CACHE:
+        font_file = str(FONT_FOLDER / font_name)
+        try:
+            _FONT_CACHE[key] = ImageFont.truetype(font_file, font_size)
+            logger.debug("Loaded font into cache: %s size %d", font_name, font_size)
+        except (OSError, IOError):
+            _FONT_CACHE[key] = ImageFont.load_default()
+    return _FONT_CACHE[key]
+
 
 def _to_upper(font_name: str, text: str) -> str:
     return text.upper() if font_name.lower() == "impact.ttf" else text
@@ -141,12 +158,8 @@ def _draw_text_box(
     """
     x, y, box_width, box_height = bbox
     text = _to_upper(font_name, text)
-    font_file = str(FONT_FOLDER / font_name)
 
-    try:
-        font = ImageFont.truetype(font_file, font_size_hint)
-    except (OSError, IOError):
-        font = ImageFont.load_default()
+    font = _get_cached_font(font_name, font_size_hint)
 
     # Grow font until text overflows the box
     font_size = font_size_hint
@@ -163,17 +176,11 @@ def _draw_text_box(
             break
 
         font_size += 1
-        try:
-            font = ImageFont.truetype(font_file, font_size)
-        except (OSError, IOError):
-            break
+        font = _get_cached_font(font_name, font_size)
 
     # Step back one to stay inside box
     font_size = max(8, font_size - 1)
-    try:
-        font = ImageFont.truetype(font_file, font_size)
-    except (OSError, IOError):
-        font = ImageFont.load_default()
+    font = _get_cached_font(font_name, font_size)
 
     cw = _char_width(font, font_name)
     wrap_w = max(1, box_width // max(1, cw))
@@ -200,18 +207,21 @@ def _draw_text_box(
 
         text_y += line_h * LINE_HEIGHT_MUL
 
-
 # ── Public async interface ────────────────────────────────────────────────────
 
-executor = ThreadPoolExecutor(max_workers=8)
+# Increased from 8 to 16 workers for better concurrency under load
+executor = ThreadPoolExecutor(max_workers=16)
 
 
 def _sync_overlay_text(
     img: Image.Image,
     meme: Dict[str, Any],
     texts: List[str],
-) -> Path:
-    """Pure synchronous function executing CPU-bound Pillow operations."""
+) -> io.BytesIO:
+    """Pure synchronous function executing CPU-bound Pillow operations.
+    
+    Returns BytesIO buffer for direct streaming to storage (no disk I/O).
+    """
     draw = ImageDraw.Draw(img)
 
     for bbox, text in zip(meme["text_coordinates_xy_wh"], texts):
@@ -224,28 +234,28 @@ def _sync_overlay_text(
             text_stroke=meme.get("text_stroke", True),
         )
 
-    out = _unique_output_path()
-    # Save as JPEG: ~3-5x faster to encode than PNG and ~60% smaller
-    # (the storage layer re-encodes to WebP anyway)
-    out = out.with_suffix(".jpg")
-    # Ensure RGB (JPEG doesn't support alpha)
-    if img.mode in ("RGBA", "P"):
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-        img = background
-    elif img.mode != "RGB":
+    # Encode directly to BytesIO — no disk I/O, ready for streaming upload
+    out = io.BytesIO()
+    
+    # Ensure RGB/RGBA for WebP
+    if img.mode == "P":
+        img = img.convert("RGBA")
+    elif img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
-    img.save(out, format="JPEG", quality=88, optimize=True)
+    
+    # Save with optimized WebP settings directly to memory
+    img.save(out, format="WEBP", quality=90, method=6)
+    out.seek(0)
     return out
 
 
 async def overlay_text_on_image_async(
     meme: Dict[str, Any],
     texts: List[str],
-) -> Path:
+) -> io.BytesIO:
     """
     Async version — downloads remote template images when needed.
-    Returns path to the newly created output PNG.
+    Returns BytesIO buffer ready for streaming upload (no disk I/O).
     """
     img = await _load_template_image(
         meme["file_path"],
@@ -268,10 +278,11 @@ async def overlay_text_on_image_async(
 def overlay_text_on_image(
     meme: Dict[str, Any],
     texts: List[str],
-) -> Path:
+) -> io.BytesIO:
     """
     Sync wrapper around the async compositor.
     Used by the ARQ worker (which runs in its own event loop).
+    Returns BytesIO buffer ready for streaming upload.
     """
     try:
         loop = asyncio.get_event_loop()
@@ -291,8 +302,8 @@ def overlay_text_on_image(
         return _overlay_local_only(meme, texts)
 
 
-def _overlay_local_only(meme: Dict[str, Any], texts: List[str]) -> Path:
-    """Fallback compositor that only reads local files."""
+def _overlay_local_only(meme: Dict[str, Any], texts: List[str]) -> io.BytesIO:
+    """Fallback compositor that only reads local files. Returns BytesIO buffer."""
     file_path = meme.get("file_path")
     if file_path:
         image_path = IMAGE_FOLDER / file_path
@@ -314,6 +325,7 @@ def _overlay_local_only(meme: Dict[str, Any], texts: List[str]) -> Path:
             text_stroke=meme.get("text_stroke", True),
         )
 
-    out = _unique_output_path()
-    img.save(out, format="PNG", optimize=True)
+    out = io.BytesIO()
+    img.save(out, format="WEBP", quality=90, method=6)
+    out.seek(0)
     return out

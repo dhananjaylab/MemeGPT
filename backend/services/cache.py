@@ -114,6 +114,36 @@ async def set_cached_meme_url(
         logger.warning("Meme URL cache set failed: %s", exc)
 
 
+# ── Meme full metadata cache (eliminates DB query after cache hit) ────────────
+
+async def get_cached_meme_metadata(
+    template_id: int, texts: List[str]
+) -> Optional[Dict[str, Any]]:
+    """Return full meme metadata from cache (template_name, image_url, etc)."""
+    try:
+        r = await _get_redis()
+        key = f"mem_meta:{meme_url_key(template_id, texts)[5:]}"  # mem_meta: prefix
+        raw = await r.get(key)
+        if raw:
+            logger.debug("Meme metadata cache HIT for template %d", template_id)
+            return json.loads(raw)
+    except Exception as exc:
+        logger.warning("Meme metadata cache get failed: %s", exc)
+    return None
+
+
+async def set_cached_meme_metadata(
+    template_id: int, texts: List[str], metadata: Dict[str, Any]
+) -> None:
+    """Cache full meme metadata to eliminate DB query on cache hit."""
+    try:
+        r = await _get_redis()
+        key = f"mem_meta:{meme_url_key(template_id, texts)[5:]}"  # mem_meta: prefix
+        await r.setex(key, MEME_URL_TTL, json.dumps(metadata))
+    except Exception as exc:
+        logger.warning("Meme metadata cache set failed: %s", exc)
+
+
 # ── Template image cache ─────────────────────────────────────────────────────
 
 async def get_cached_template_image(url: str) -> Optional[bytes]:

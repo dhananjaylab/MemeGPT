@@ -15,13 +15,16 @@ from services.cdn_config import CDNManager
 
 logger = logging.getLogger(__name__)
 
+from botocore.config import Config
+
 # Initialize R2 client
 r2_client = boto3.client(
     's3',
     endpoint_url=settings.r2_endpoint_url,
     aws_access_key_id=settings.r2_access_key,
     aws_secret_access_key=settings.r2_secret_key,
-    region_name='auto'
+    region_name='auto',
+    config=Config(connect_timeout=3, read_timeout=10, s3={'addressing_style': 'path'})
 ) if settings.r2_access_key else None
 
 # Initialize CDN manager
@@ -192,22 +195,28 @@ def optimize_image(file_path: Path, quality: int = 85) -> Tuple[io.BytesIO, str]
     data, content_type, _ = image_optimizer.optimize_for_web(img, quality=quality)
     return data, content_type
 
-async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True, 
+async def upload_to_r2(file_path_or_buffer, object_key: str, optimize: bool = True, 
                   create_variants: bool = False) -> Optional[Dict[str, str]]:
     """
-    Upload image to Cloudflare R2 with optimization and CDN configuration
+    Upload image to Cloudflare R2 with optimization and CDN configuration.
+    
+    Accepts either a Path (file) or BytesIO (memory buffer).
     Returns dictionary with URLs for different variants.
     Falls back to local storage if R2 is unavailable (development only).
     """
     try:
         # Try R2 upload if credentials are configured
         if r2_client and cdn_manager and settings.r2_access_key_id and settings.r2_secret_access_key:
-            # Load image
-            img = Image.open(file_path)
-            
-            # Generate file hash for cache busting
-            with open(file_path, 'rb') as f:
-                file_hash = image_optimizer.calculate_file_hash(f.read())
+            # Load image from file or memory
+            if isinstance(file_path_or_buffer, io.BytesIO):
+                file_path_or_buffer.seek(0)
+                img = Image.open(file_path_or_buffer)
+                file_hash = image_optimizer.calculate_file_hash(file_path_or_buffer.getvalue())
+            else:
+                file_path = file_path_or_buffer
+                img = Image.open(file_path)
+                with open(file_path, 'rb') as f:
+                    file_hash = image_optimizer.calculate_file_hash(f.read())
             
             # Prepare object key with hash
             base_key = object_key.rsplit('.', 1)[0] if '.' in object_key else object_key
@@ -231,8 +240,12 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
                     data, content_type, metadata = image_optimizer.optimize_for_web(img)
                     final_key = f"{base_key}-{file_hash}.webp"
                 else:
-                    with open(file_path, 'rb') as f:
-                        data = io.BytesIO(f.read())
+                    if isinstance(file_path_or_buffer, io.BytesIO):
+                        file_path_or_buffer.seek(0)
+                        data = file_path_or_buffer
+                    else:
+                        with open(file_path_or_buffer, 'rb') as f:
+                            data = io.BytesIO(f.read())
                     content_type = cdn_manager.get_content_type(object_key)
                     metadata = {'optimization_applied': False}
                     final_key = f"{base_key}-{file_hash}.{object_key.split('.')[-1]}"
@@ -286,13 +299,22 @@ async def upload_to_r2(file_path: Path, object_key: str, optimize: bool = True,
         output_dir = Path(__file__).parent.parent / "public" / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Copy file to output directory
-        filename = file_path.name
-        output_path = output_dir / filename
-        
-        # If file already exists, keep it
-        if not output_path.exists():
-            shutil.copy2(file_path, output_path)
+        # Handle both file path and BytesIO
+        if isinstance(file_path_or_buffer, io.BytesIO):
+            filename = object_key.split('/')[-1]
+            output_path = output_dir / filename
+            file_path_or_buffer.seek(0)
+            with open(output_path, 'wb') as f:
+                f.write(file_path_or_buffer.getvalue())
+        else:
+            file_path = file_path_or_buffer
+            # Copy file to output directory
+            filename = file_path.name
+            output_path = output_dir / filename
+            
+            # If file already exists, keep it
+            if not output_path.exists():
+                shutil.copy2(file_path, output_path)
         
         # Return relative URL path
         relative_url = f"/static/output/{filename}"
