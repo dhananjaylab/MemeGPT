@@ -117,35 +117,10 @@ async def _resolve_image_url(template: Dict[str, Any], texts: List[str], job_id:
         )
         return cached_url
 
-    image_url = None
-    if template.get("source") == "imgflip" and template.get("imgflip_id"):
-        logger.info(
-            "Using Imgflip API for template %d (imgflip_id=%s)",
-            template_id, template["imgflip_id"]
-        )
-        try:
-            imgflip_result = await imgflip_service.caption_image(
-                template["imgflip_id"],
-                texts
-            )
-            image_url = imgflip_result.get("data", {}).get("url")
-            if not image_url:
-                raise Exception("Imgflip API did not return image URL")
-            logger.info("Imgflip API generated meme: %s", image_url[:100])
-        except Exception as imgflip_exc:
-            logger.error(
-                "Imgflip API failed for template %d: %s. Falling back to compositor.",
-                template_id, imgflip_exc
-            )
-            image_path = await overlay_text_on_image_async(template, texts)
-            object_key = f"memes/{uuid4()}.png"
-            upload_result = await upload_to_r2(image_path, object_key)
-            image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
-    else:
-        image_path = await overlay_text_on_image_async(template, texts)
-        object_key = f"memes/{uuid4()}.png"
-        upload_result = await upload_to_r2(image_path, object_key)
-        image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+    image_path = await overlay_text_on_image_async(template, texts)
+    object_key = f"memes/{uuid4()}{image_path.suffix}"
+    upload_result = await upload_to_r2(image_path, object_key, optimize=False, create_variants=False)
+    image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
     if image_url:
         await set_cached_meme_url(template_id, texts, image_url)
