@@ -35,7 +35,6 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
   const [placeholder] = useState(getRandomPlaceholder);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<QuickMemeResponse | null>(null);
-  const [aiProvider, setAiProvider] = useState<'openai' | 'gemini'>('openai');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sseRef = useRef<EventSource | null>(null);
 
@@ -68,7 +67,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
     }
 
     try {
-      const res = await generateMemeQuick({ prompt: trimmed, ai_provider: aiProvider });
+      const res = await generateMemeQuick({ prompt: trimmed, ai_provider: 'gemini' });
 
       if ('job_id' in res) {
         const eventSource = new EventSource(`/api/jobs/${res.job_id}/stream`);
@@ -135,7 +134,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
         toast.error(msg);
       }
     }
-  }, [prompt, aiProvider, onGenerated]);
+  }, [prompt, onGenerated]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -194,25 +193,7 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
             <span className="badge-acid text-[10px]">Instant</span>
           </div>
 
-          {/* Provider toggle */}
-          <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-0.5">
-            {(['openai', 'gemini'] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setAiProvider(p)}
-                className={`px-3 py-1 rounded text-xs font-mono transition-all ${
-                  aiProvider === p
-                    ? 'bg-acid text-black font-semibold'
-                    : 'text-muted hover:text-secondary'
-                }`}
-              >
-                {p === 'openai' ? 'GPT-4o' : 'Gemini'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Textarea */}
+          {/* Textarea */}
         <div className="relative">
           <textarea
             ref={inputRef}

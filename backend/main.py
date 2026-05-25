@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MemeGPT API",
     version="2.1.0",
-    description="AI meme generation API — Gen-Z edition powered by GPT-4o & Gemini",
+    description="AI meme generation API — Gen-Z edition powered by Google Gemini",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
