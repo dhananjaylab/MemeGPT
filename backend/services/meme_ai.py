@@ -56,10 +56,32 @@ gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini
 
 # ── Template data ─────────────────────────────────────────────────────────────
 
-def load_meme_data() -> str:
+# Load once at module import — eliminates repeated disk reads (called 6+ times per request)
+_MEME_DATA_STR: str = ""
+_MEME_DATA_LIST: list = []
+
+
+def _load_meme_data_once() -> None:
+    """Called once at module load time to populate in-memory caches."""
+    global _MEME_DATA_STR, _MEME_DATA_LIST
     p = ROOT_DIRECTORY / "public" / "meme_data.json"
     with open(p, encoding="utf-8") as f:
-        return f.read()
+        _MEME_DATA_STR = f.read()
+    _MEME_DATA_LIST = json.loads(_MEME_DATA_STR)
+    logger.info("Loaded %d meme templates into memory", len(_MEME_DATA_LIST))
+
+
+_load_meme_data_once()
+
+
+def load_meme_data() -> str:
+    """Return the cached meme data JSON string (no disk I/O)."""
+    return _MEME_DATA_STR
+
+
+def get_meme_data_list() -> list:
+    """Return the parsed meme template list (no disk I/O, no JSON parsing)."""
+    return _MEME_DATA_LIST
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -131,13 +153,13 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
     meme_data = load_meme_data()
     try:
         resp = await openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": _build_openai_system(meme_data)},
                 {"role": "user",   "content": prompt},
             ],
             temperature=1.1,    # slightly higher for more creative Gen-Z output
-            max_tokens=2048,
+            max_tokens=512,     # actual output is ~200-300 tokens; 2048 wastes reservation time
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -226,7 +248,7 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             # If we have template_name but no ID, try to look it up
             if meme_id is None and meme_name:
                 try:
-                    meme_data_obj = json.loads(load_meme_data())
+                    meme_data_obj = get_meme_data_list()  # in-memory, no disk/json overhead
                     # Try exact match first
                     template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
                     if template:
@@ -243,7 +265,7 @@ async def generate_meme_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
             if not meme_name:
                 # Try to get template name from the meme data if we have template_id
                 try:
-                    meme_data_obj = json.loads(load_meme_data())
+                    meme_data_obj = get_meme_data_list()  # in-memory, no disk/json overhead
                     template = next((t for t in meme_data_obj if t["id"] == int(meme_id)), None)
                     meme_name = template["name"] if template else f"Template {meme_id}"
                 except:
@@ -292,7 +314,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
         config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            max_output_tokens=2048,
+            max_output_tokens=512,     # actual output is ~200-300 tokens; reducing saves latency
             temperature=1.0,
             response_mime_type="application/json",
             response_schema=MemeList,
@@ -377,7 +399,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                     # If we have template_name but no ID, try to look it up
                     if meme_id is None and meme_name:
                         try:
-                            meme_data_obj = json.loads(load_meme_data())
+                            meme_data_obj = get_meme_data_list()  # in-memory, no disk/json overhead
                             # Try exact match first
                             template = next((t for t in meme_data_obj if t["name"].lower() == meme_name.lower()), None)
                             if template:

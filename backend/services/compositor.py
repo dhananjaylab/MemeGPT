@@ -199,7 +199,7 @@ def _draw_text_box(
 
 # ── Public async interface ────────────────────────────────────────────────────
 
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(max_workers=8)
 
 
 def _sync_overlay_text(
@@ -221,7 +221,17 @@ def _sync_overlay_text(
         )
 
     out = _unique_output_path()
-    img.save(out, format="PNG", optimize=True)
+    # Save as JPEG: ~3-5x faster to encode than PNG and ~60% smaller
+    # (the storage layer re-encodes to WebP anyway)
+    out = out.with_suffix(".jpg")
+    # Ensure RGB (JPEG doesn't support alpha)
+    if img.mode in ("RGBA", "P"):
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    img.save(out, format="JPEG", quality=88, optimize=True)
     return out
 
 

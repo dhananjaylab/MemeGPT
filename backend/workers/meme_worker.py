@@ -79,27 +79,31 @@ async def update_job_status(
         return False
 
 
-async def get_template_by_id(
-    db: AsyncSession, template_id: int
-) -> Optional[Dict[str, Any]]:
+async def get_templates_by_ids(
+    db: AsyncSession, template_ids: List[int]
+) -> Dict[int, Dict[str, Any]]:
+    """Batch-fetch all templates in a single query — avoids N sequential round-trips."""
+    if not template_ids:
+        return {}
     result = await db.execute(
-        select(MemeTemplate).where(MemeTemplate.id == template_id)
+        select(MemeTemplate).where(MemeTemplate.id.in_(template_ids))
     )
-    t = result.scalar_one_or_none()
-    if not t:
-        return None
+    templates = result.scalars().all()
     return {
-        "id": t.id,
-        "name": t.name,
-        "file_path": t.file_path,
-        "font_path": t.font_path,
-        "text_color": t.text_color,
-        "text_stroke": t.text_stroke,
-        "text_coordinates_xy_wh": t.text_coordinates_xy_wh,
-        "number_of_text_fields": t.number_of_text_fields,
-        "image_url": t.image_url,   # ← NEW: needed for remote templates
-        "source": t.source,
-        "imgflip_id": t.imgflip_id,  # ← NEW: needed for Imgflip API
+        t.id: {
+            "id": t.id,
+            "name": t.name,
+            "file_path": t.file_path,
+            "font_path": t.font_path,
+            "text_color": t.text_color,
+            "text_stroke": t.text_stroke,
+            "text_coordinates_xy_wh": t.text_coordinates_xy_wh,
+            "number_of_text_fields": t.number_of_text_fields,
+            "image_url": t.image_url,
+            "source": t.source,
+            "imgflip_id": t.imgflip_id,
+        }
+        for t in templates
     }
 
 
@@ -163,7 +167,8 @@ async def process_meme_generation(
     logger.info(
         "Processing job %s provider=%s mode=%s", job_id, ai_provider, generation_mode
     )
-    await update_job_status(job_id, "processing")
+    # Fire-and-forget: don't await status update — start AI immediately
+    asyncio.create_task(update_job_status(job_id, "processing"))
 
     try:
         # ── 1. Generate / retrieve captions ──────────────────────────────────
@@ -204,42 +209,38 @@ async def process_meme_generation(
             )
             return {"status": "failed"}
 
-        # ── 2. Compose meme images ────────────────────────────────────────────
+        # ── 2. Compose meme images (fully parallel pipeline) ──────────────────
+        # Each meme: resolve_image_url → db_save runs concurrently
         meme_ids: List[str] = []
 
         async with db_session.AsyncSessionLocal() as db:
-            render_tasks = []
+            # Batch-fetch all templates in a single DB query
+            template_id_list = []
             for ai_meme in captions:
                 try:
+                    template_id_list.append(int(ai_meme["meme_id"]))
+                except (KeyError, ValueError, TypeError):
+                    pass
+
+            templates_map = await get_templates_by_ids(db, template_id_list)
+
+            async def _compose_one_meme(
+                ai_meme: Dict[str, Any],
+            ) -> Optional[str]:
+                """Resolve image URL for one meme and persist it; returns meme_id or None."""
+                try:
                     template_id = int(ai_meme["meme_id"])
-                    template = await get_template_by_id(db, template_id)
+                    template = templates_map.get(template_id)
                     if not template:
                         logger.warning("Template %d not found — skipping", template_id)
-                        continue
+                        return None
 
                     texts: List[str] = ai_meme["meme_text"]
-                    
-                    task = asyncio.create_task(_resolve_image_url(template, texts, job_id))
-                    render_tasks.append((ai_meme, template, texts, task))
-
-                except Exception as exc:
-                    logger.error("Error setting up compose for job %s: %s", job_id, exc)
-
-            if render_tasks:
-                await asyncio.gather(*(t[3] for t in render_tasks), return_exceptions=True)
-            
-            for ai_meme, template, texts, task in render_tasks:
-                try:
-                    if task.exception():
-                        logger.error("Task error for job %s: %s", job_id, task.exception())
-                        continue
-                    
-                    image_url = task.result()
+                    image_url = await _resolve_image_url(template, texts, job_id)
                     if not image_url:
-                        logger.error("Failed to resolve image URL for job %s", job_id)
-                        continue
+                        logger.error("Failed to resolve image URL for template %d job %s", template_id, job_id)
+                        return None
 
-                    # Persist to DB
                     meme_id = str(uuid4())
                     db.add(
                         GeneratedMeme(
@@ -253,13 +254,20 @@ async def process_meme_generation(
                             is_public=True,
                         )
                     )
-                    meme_ids.append(meme_id)
+                    return meme_id
 
                 except Exception as exc:
-                    logger.error(
-                        "Error saving composed meme for job %s: %s", job_id, exc, exc_info=True
-                    )
+                    logger.error("Error composing meme for job %s: %s", job_id, exc, exc_info=True)
+                    return None
 
+            # Run all meme compositions concurrently
+            results = await asyncio.gather(
+                *[_compose_one_meme(m) for m in captions],
+                return_exceptions=True,
+            )
+            meme_ids = [r for r in results if isinstance(r, str)]
+
+            # Single commit for all memes
             await db.commit()
 
         if not meme_ids:
@@ -285,7 +293,7 @@ class WorkerSettings:
     functions = [process_meme_generation]
     redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
     queue_name = settings.arq_queue_name
-    max_jobs = 10          # allow more concurrent jobs
+    max_jobs = 20          # allow more concurrent jobs
     job_timeout = 120      # 2-minute hard cap per job
 
     @staticmethod
