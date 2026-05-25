@@ -71,8 +71,12 @@ async def _fetch_remote_image(url: str) -> Image.Image:
     if cached:
         return Image.open(io.BytesIO(cached))
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-        resp = await client.get(url, headers={"User-Agent": "MemeGPT-Compositor/2.0"})
+    async with httpx.AsyncClient(follow_redirects=True, timeout=3.0) as client:
+        # Imgflip tarpits non-browser user agents, causing 15s timeouts. Use a Chrome UA.
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = await client.get(url, headers=headers)
         resp.raise_for_status()
         image_bytes = resp.content
 
