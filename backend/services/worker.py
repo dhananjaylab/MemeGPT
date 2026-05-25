@@ -51,7 +51,7 @@ async def close_arq_pool():
 async def enqueue_meme_generation(
     prompt: str,
     user: Optional[User] = None,
-    ai_provider: str = "openai",
+    ai_provider: str = "gemini",
     generation_mode: str = "auto",
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,

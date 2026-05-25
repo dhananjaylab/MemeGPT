@@ -192,8 +192,9 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
             <h3 className="font-semibold text-sm">Quick Generate</h3>
             <span className="badge-acid text-[10px]">Instant</span>
           </div>
+        </div>
 
-          {/* Textarea */}
+        {/* Textarea */}
         <div className="relative">
           <textarea
             ref={inputRef}

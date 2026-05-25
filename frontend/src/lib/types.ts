@@ -157,7 +157,7 @@ export interface MemeStats {
 // Form types
 export interface GenerateMemeRequest {
   prompt: string;
-  ai_provider?: 'openai' | 'gemini';
+  ai_provider?: 'gemini';
   generation_mode?: 'auto' | 'manual';
   template_id?: number;
   captions?: string[];

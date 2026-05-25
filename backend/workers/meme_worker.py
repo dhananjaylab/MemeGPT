@@ -137,7 +137,7 @@ async def process_meme_generation(
     job_id: str,
     user_id: Optional[str],
     prompt: str,
-    ai_provider: str = "openai",
+    ai_provider: str = "gemini",
     generation_mode: str = "auto",
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,
@@ -172,8 +172,8 @@ async def process_meme_generation(
                 captions = cached_caps
             else:
                 provider = ai_provider.lower()
-                if provider not in {AIProvider.OPENAI.value, AIProvider.GEMINI.value}:
-                    provider = AIProvider.OPENAI.value
+                if provider not in {AIProvider.GEMINI.value}:
+                    provider = AIProvider.GEMINI.value
                 generator = await get_caption_generator(provider)
                 captions = await generator(prompt)
 
