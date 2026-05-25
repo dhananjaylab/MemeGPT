@@ -18,7 +18,7 @@ router = APIRouter()
 class AISuggestRequest(BaseModel):
     """Request for AI-generated meme suggestions"""
     prompt: str
-    provider: Optional[str] = None  # "openai", "gemini", or None for default
+    provider: Optional[str] = None  # "gemini" or None for default
 
 
 class AIMemeOption(BaseModel):
@@ -47,11 +47,10 @@ async def get_ai_suggestions(
     Get AI-generated meme suggestions for a prompt.
     
     This is a backend proxy endpoint for Gemini API calls (secure, no exposed keys).
-    For development, you can use this with either OpenAI or Gemini.
     
     Args:
         prompt: User's natural language prompt for meme generation
-        provider: Optional provider override ("openai" or "gemini")
+        provider: Optional provider override ("gemini" or None for default)
     
     Returns:
         List of meme suggestions with template IDs and captions

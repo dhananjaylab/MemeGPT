@@ -56,7 +56,7 @@ router = APIRouter()
 
 class GenerateMemeRequest(BaseModel):
     prompt: str
-    ai_provider: Optional[str] = "openai"
+    ai_provider: Optional[str] = "gemini"
     generation_mode: Optional[str] = "auto"
     template_id: Optional[int] = None
     captions: Optional[List[str]] = None
@@ -78,7 +78,7 @@ class QuickMemeRequest(BaseModel):
     prompt: Optional[str] = None
     template_id: Optional[int] = None
     captions: Optional[List[str]] = None
-    ai_provider: Optional[str] = "openai"
+    ai_provider: Optional[str] = "gemini"
 
 
 class QuickMemeResponse(BaseModel):
