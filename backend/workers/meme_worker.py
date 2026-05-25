@@ -9,6 +9,9 @@ v2 enhancements:
 
 from __future__ import annotations
 
+import os
+os.environ["NO_PROXY"] = "*"  # Bypass Windows WPAD 10s delay
+
 import asyncio
 import json
 import logging

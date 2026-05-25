@@ -65,8 +65,7 @@ openai_client = AsyncOpenAI(
 ) if settings.openai_api_key else None
 
 gemini_client = genai.Client(
-    api_key=settings.gemini_api_key,
-    http_options={'api_version': 'v1alpha'} # Just keeping config simple
+    api_key=settings.gemini_api_key
 ) if settings.gemini_api_key else None
 
 
@@ -330,7 +329,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
         config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            max_output_tokens=512,     # actual output is ~200-300 tokens; reducing saves latency
+            max_output_tokens=2048,     # increased to prevent JSON truncation
             temperature=1.0,
             response_mime_type="application/json",
             response_schema=MemeList,
