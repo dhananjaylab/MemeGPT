@@ -71,7 +71,7 @@ async def _fetch_remote_image(url: str) -> Image.Image:
     if cached:
         return Image.open(io.BytesIO(cached))
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=3.0) as client:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=3.0, trust_env=False) as client:
         # Imgflip tarpits non-browser user agents, causing 15s timeouts. Use a Chrome UA.
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

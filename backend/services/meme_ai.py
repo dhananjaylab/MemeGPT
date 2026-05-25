@@ -48,10 +48,21 @@ class MemeList(BaseModel):
     output: List[MemeOutput] = Field(description="Exactly 3 generated meme options")
 
 
-# ── Clients ───────────────────────────────────────────────────────────────────
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+# Windows WPAD (Web Proxy Auto-Discovery) causes a 10-second cold-start delay 
+# on the first httpx request. Disabling trust_env bypasses this entirely.
+import httpx
+_fast_http_client = httpx.AsyncClient(trust_env=False)
 
-gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+# ── Clients ───────────────────────────────────────────────────────────────────
+openai_client = AsyncOpenAI(
+    api_key=settings.openai_api_key, 
+    http_client=_fast_http_client
+) if settings.openai_api_key else None
+
+gemini_client = genai.Client(
+    api_key=settings.gemini_api_key,
+    http_options={'api_version': 'v1alpha'} # Just keeping config simple
+) if settings.gemini_api_key else None
 
 
 # ── Template data ─────────────────────────────────────────────────────────────
