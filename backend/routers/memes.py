@@ -217,9 +217,9 @@ async def generate_meme(
     if len(body.prompt) > 1000:
         raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
 
-    ai_provider = (body.ai_provider or "openai").lower()
-    if ai_provider not in {"openai", "gemini", "both"}:
-        raise HTTPException(status_code=400, detail="ai_provider must be 'openai', 'gemini', or 'both'")
+    ai_provider = (body.ai_provider or "gemini").lower()
+    if ai_provider not in {"gemini"}:
+        raise HTTPException(status_code=400, detail="ai_provider must be 'gemini'")
 
     generation_mode = (body.generation_mode or "auto").lower()
     if generation_mode not in {"auto", "manual"}:
@@ -304,7 +304,7 @@ async def generate_meme_quick(
         )
 
     # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
-    ai_provider = (body.ai_provider or "openai").lower()
+    ai_provider = (body.ai_provider or "gemini").lower()
     generation_mode = "manual" if (body.template_id is not None and body.captions) else "auto"
 
     job_id = await enqueue_meme_generation(

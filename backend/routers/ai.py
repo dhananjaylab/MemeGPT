@@ -67,25 +67,14 @@ async def get_ai_suggestions(
     # Determine provider
     provider = body.provider or settings.ai_provider
     provider = provider.lower()
-    
     # Validate provider availability
     if provider == AIProvider.GEMINI.value and not settings.has_gemini:
         raise HTTPException(
             status_code=503, 
             detail="Gemini AI provider not configured. Please set GEMINI_API_KEY."
         )
-    elif provider == AIProvider.OPENAI.value and not settings.has_openai:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI provider not configured. Please set OPENAI_API_KEY."
-        )
-    elif not settings.has_openai and not settings.has_gemini:
-        raise HTTPException(
-            status_code=503,
-            detail="No AI provider configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
-        )
     
-    # Generate suggestions using unified generator with failover
+    # Generate suggestions using unified generator
     try:
         generator = await get_caption_generator(provider)
         suggestions = await generator(body.prompt)
@@ -129,10 +118,6 @@ async def get_ai_status():
     Useful for frontend to determine which features are available.
     """
     return {
-        "openai": {
-            "available": settings.has_openai,
-            "provider": "openai"
-        },
         "gemini": {
             "available": settings.has_gemini,
             "provider": "gemini"
