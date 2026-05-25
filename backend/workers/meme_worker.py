@@ -120,9 +120,9 @@ async def _resolve_image_url(template: Dict[str, Any], texts: List[str], job_id:
         )
         return cached_url
 
-    image_path = await overlay_text_on_image_async(template, texts)
-    object_key = f"memes/{uuid4()}{image_path.suffix}"
-    upload_result = await upload_to_r2(image_path, object_key, optimize=False, create_variants=False)
+    image_buffer = await overlay_text_on_image_async(template, texts)
+    object_key = f"memes/{uuid4()}.webp"
+    upload_result = await upload_to_r2(image_buffer, object_key, optimize=False, create_variants=False)
     image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
     if image_url:
@@ -272,7 +272,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
     queue_name = settings.arq_queue_name
     max_jobs = 20          # allow more concurrent jobs
-    job_timeout = 120      # 2-minute hard cap per job
+    job_timeout = 180      # 3-minute hard cap per job (Gemini + compose + upload can be slow)
 
     @staticmethod
     async def on_startup(ctx: Dict[str, Any]) -> None:

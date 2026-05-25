@@ -134,7 +134,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
 
         config = types.GenerateContentConfig(
             system_instruction=_build_gemini_system(meme_data),
-            max_output_tokens=2048,     # increased to prevent JSON truncation
+            max_output_tokens=4096,     # increased to prevent JSON truncation
             temperature=1.0,
             response_mime_type="application/json",
             response_schema=MemeList,
@@ -184,7 +184,28 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                         continue
                     return None
                 
-                data = json.loads(raw)
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError as json_err:
+                    # Try to recover from incomplete JSON by finding the last complete meme
+                    logger.warning("Failed to parse JSON on attempt %d: %s. Attempting recovery...", attempt + 1, json_err)
+                    # Find the last complete meme object by looking for the last closing brace
+                    last_brace = raw.rfind('},')
+                    if last_brace > 0:
+                        recovered = raw[:last_brace + 1] + ']\n}'
+                        try:
+                            data = json.loads(recovered)
+                            logger.info("Successfully recovered partial JSON response")
+                        except json.JSONDecodeError:
+                            if attempt < max_retries:
+                                logger.info("Recovery failed, retrying (attempt %d of %d)...", attempt + 2, max_retries + 1)
+                                continue
+                            raise
+                    else:
+                        if attempt < max_retries:
+                            logger.info("Could not recover incomplete JSON, retrying (attempt %d of %d)...", attempt + 2, max_retries + 1)
+                            continue
+                        raise
                 
                 # Handle different response formats
                 if isinstance(data, dict):
