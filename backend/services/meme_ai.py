@@ -51,6 +51,11 @@ class MemeList(BaseModel):
 # Windows WPAD (Web Proxy Auto-Discovery) causes a 10-second cold-start delay 
 # on the first httpx request. Disabling trust_env bypasses this entirely.
 import httpx
+import os
+
+# Disable proxy auto-discovery globally for all httpx/urllib clients
+os.environ["NO_PROXY"] = "*"
+
 _fast_http_client = httpx.AsyncClient(trust_env=False)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
@@ -337,7 +342,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
             try:
                 # Use async generation
                 resp = await gemini_client.aio.models.generate_content(
-                    model="gemini-3-flash-preview",
+                    model="gemini-2.5-flash",
                     contents=prompt,
                     config=config
                 )
