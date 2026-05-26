@@ -4,7 +4,6 @@
 v2 additions:
   • POST /generate/quick — synchronous fast-path (no queue, cache-first)
   • GET  /templates — now filters by source, returns Gen-Z-ready template list
-  • POST /templates/sync-imgflip — unchanged
   • GET  /proxy-image — unchanged
 """
 
@@ -35,7 +34,6 @@ from services.cache import (
     set_cached_meme_metadata,
 )
 from services.compositor import overlay_text_on_image_async
-from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator
 from services.storage import upload_to_r2
 from services.template_catalog import build_template_fields
@@ -49,6 +47,7 @@ from services.worker import enqueue_meme_generation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+TEMPLATE_SOURCES = {"local", "database"}
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -120,7 +119,6 @@ class TemplateResponse(BaseModel):
     font_path: str
     usage_instructions: Optional[str] = None
     source: Optional[str] = "local"
-    imgflip_id: Optional[str] = None
 
 
 # ── Async generation helper (shared by quick + worker) ───────────────────────
@@ -133,47 +131,14 @@ async def _compose_and_upload(
     db: AsyncSession,
 ) -> GeneratedMeme:
     """Compose image, upload to storage, persist to DB, return model instance."""
-    
-    # Check if this is an Imgflip template
-    if template_dict.get("source") == "imgflip" and template_dict.get("imgflip_id"):
-        logger.info(
-            "Using Imgflip API for template %d (imgflip_id=%s)",
-            template_dict["id"], template_dict["imgflip_id"]
-        )
-        try:
-            # Use Imgflip caption API
-            imgflip_result = await imgflip_service.caption_image(
-                template_dict["imgflip_id"],
-                texts
-            )
-            image_url = imgflip_result.get("data", {}).get("url")
-            if not image_url:
-                raise RuntimeError("Imgflip API did not return image URL")
-            
-            logger.info("Imgflip API generated meme: %s", image_url[:100])
-        except Exception as imgflip_exc:
-            logger.error(
-                "Imgflip API failed for template %d: %s. Falling back to compositor.",
-                template_dict["id"], imgflip_exc
-            )
-            # Fallback to local compositor
-            image_buffer = await overlay_text_on_image_async(template_dict, texts)
-            object_key = f"memes/{uuid4()}.webp"
-            upload_result = await upload_to_r2(image_buffer, object_key)
-            image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
-            
-            if not image_url:
-                raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
-    else:
-        # Use local compositor for non-Imgflip templates
-        image_buffer = await overlay_text_on_image_async(template_dict, texts)
+    image_buffer = await overlay_text_on_image_async(template_dict, texts)
 
-        object_key = f"memes/{uuid4()}.webp"
-        upload_result = await upload_to_r2(image_buffer, object_key)
-        image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+    object_key = f"memes/{uuid4()}.webp"
+    upload_result = await upload_to_r2(image_buffer, object_key)
+    image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
-        if not image_url:
-            raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
+    if not image_url:
+        raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
 
     meme = GeneratedMeme(
         id=str(uuid4()),
@@ -516,9 +481,11 @@ async def get_templates(
     try:
         query = select(MemeTemplate)
         if source and source != "all":
-            if source not in {"local", "database", "imgflip"}:
-                raise HTTPException(status_code=400, detail="source must be local, database, imgflip, or all")
+            if source not in TEMPLATE_SOURCES:
+                raise HTTPException(status_code=400, detail="source must be local, database, or all")
             query = query.where(MemeTemplate.source == source)
+        else:
+            query = query.where(MemeTemplate.source.in_(TEMPLATE_SOURCES))
         query = query.order_by(MemeTemplate.id)
 
         result = await db.execute(query)
@@ -535,7 +502,6 @@ async def get_templates(
                 font_path=t.font_path,
                 usage_instructions=t.usage_instructions,
                 source=t.source,
-                imgflip_id=t.imgflip_id,
             )
             for t in templates
         ]
@@ -544,21 +510,14 @@ async def get_templates(
         raise HTTPException(status_code=500, detail="Failed to fetch templates")
 
 
-@router.post("/templates/sync-imgflip")
-async def sync_imgflip_templates(
-    db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
-    try:
-        stats = await imgflip_service.sync_templates_to_db(db)
-        return {"success": True, "message": "Successfully synced Imgflip templates", "stats": stats}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to sync: {str(exc)}")
-
-
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
 async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
+    result = await db.execute(
+        select(MemeTemplate).where(
+            MemeTemplate.id == template_id,
+            MemeTemplate.source.in_(TEMPLATE_SOURCES),
+        )
+    )
     t = result.scalar_one_or_none()
     if not t:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -573,7 +532,6 @@ async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
         font_path=t.font_path,
         usage_instructions=t.usage_instructions,
         source=t.source,
-        imgflip_id=t.imgflip_id,
     )
 
 

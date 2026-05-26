@@ -15,8 +15,6 @@ def local_frame_exists(file_path: str | None) -> bool:
 def template_source(template_data: dict[str, Any]) -> str:
     if local_frame_exists(template_data.get("file_path")):
         return "local"
-    if template_data.get("imgflip_id"):
-        return "imgflip"
     return "database"
 
 
@@ -30,7 +28,6 @@ def template_image_url(template_data: dict[str, Any]) -> str | None:
 def build_template_fields(template_data: dict[str, Any]) -> dict[str, Any]:
     image_url = template_image_url(template_data)
     source = template_source(template_data)
-    box_count = template_data.get("box_count") or template_data["number_of_text_fields"]
 
     return {
         "name": template_data["name"],
@@ -48,9 +45,6 @@ def build_template_fields(template_data: dict[str, Any]) -> dict[str, Any]:
         "preview_image_url": image_url,
         "fallback_url": template_data.get("fallback_url"),
         "source": source,
-        "imgflip_id": str(template_data["imgflip_id"]) if template_data.get("imgflip_id") else None,
-        "box_count": box_count if source == "imgflip" else None,
         "gen_z_ready": True,
         "vibe_tags": template_data.get("vibe_tags"),
     }
-

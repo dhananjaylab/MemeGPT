@@ -32,13 +32,13 @@ from services.cache import (
     get_cached_meme_url, set_cached_meme_url,
 )
 from services.compositor import overlay_text_on_image_async
-from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator, AIProvider
 from services.storage import upload_to_r2
 from services.worker import close_arq_pool, get_arq_pool
 from services.rate_limit import get_redis
 
 logger = logging.getLogger(__name__)
+TEMPLATE_SOURCES = {"local", "database"}
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -104,9 +104,9 @@ async def get_templates_by_ids(
             "number_of_text_fields": t.number_of_text_fields,
             "image_url": t.image_url,
             "source": t.source,
-            "imgflip_id": t.imgflip_id,
         }
         for t in templates
+        if t.source in TEMPLATE_SOURCES
     }
 
 

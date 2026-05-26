@@ -37,7 +37,7 @@ MemeGPT leverages Google Gemini to create intelligent memes. It automatically se
 
 ### ✨ Key Features
 - **AI-Powered Captions**: Google Gemini for intelligent caption generation.
-- **Imgflip Integration**: Access to 100+ popular templates with local fallback capabilities.
+- **Curated Templates**: Local and database-backed meme templates with reliable fallback handling.
 - **Manual Editor**: Precise, full control over text placement, styling, and formatting.
 - **Event-Driven Architecture**: Fast synchronous caching (<10ms) combined with ARQ background worker offloading and real-time Server-Sent Events (SSE) streaming for heavy generation tasks.
 - **Secure API Key Management**: Strict "Store-Hash, Show-Once" lifecycle policy using SHA-256 hashing for API keys and masked prefix display.
@@ -207,7 +207,7 @@ Monitor system resources to ensure CPU (<80%) and Memory (<85%) remain stable, a
 
 ### Common Issues & Solutions
 - **AI Formatting Failures**: Automatic field mapping and fallback parsing are handled transparently in `meme_ai.py`.
-- **Template 404s**: Ensure Imgflip credentials are valid or verify that local fallback templates exist in `backend/public/frames`.
+- **Template 404s**: Verify that local fallback templates exist in `backend/public/frames`.
 - **Provider Issues**: Ensure Google Gemini API key is valid and API quota is available.
 - **Rate Limited**: Check the `X-RateLimit-Remaining` headers in API responses and wait for the duration specified in `Retry-After`.
 

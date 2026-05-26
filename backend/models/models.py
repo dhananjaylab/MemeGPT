@@ -150,11 +150,8 @@ class MemeTemplate(Base):
     # Fallback CDN URL for templates without local files
     fallback_url: Optional[str] = Column(String, nullable=True)
 
-    # Imgflip integration
+    # Template source metadata
     source: str = Column(String, nullable=False, default="local", index=True)
-    imgflip_id: Optional[str] = Column(String, nullable=True, unique=True, index=True)
-    box_count: Optional[int] = Column(Integer, nullable=True)
-    last_synced_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
 
     # Gen-Z metadata
     gen_z_ready: bool = Column(Boolean, default=False, index=True)

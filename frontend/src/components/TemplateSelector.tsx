@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Search, Upload, RefreshCw, Database, Globe, HardDrive } from 'lucide-react';
+import { Search, Upload, Database, HardDrive } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { toast } from 'react-hot-toast';
 
 export interface Template {
   id: number;
@@ -12,8 +11,7 @@ export interface Template {
   preview_image_url?: string;
   font_path: string;
   usage_instructions?: string;
-  source?: 'local' | 'database' | 'imgflip';
-  imgflip_id?: string;
+  source?: 'local' | 'database';
 }
 
 export interface TemplateSelectorProps {
@@ -28,9 +26,8 @@ export function TemplateSelector({
   const [templates, setTemplates] = useState<Template[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'database' | 'imgflip'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'database'>('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch templates from backend
@@ -71,39 +68,13 @@ export function TemplateSelector({
     }
   }, [searchQuery, templates]);
 
-  // Sync Imgflip templates
-  const handleSyncImgflip = async () => {
-    try {
-      setIsSyncing(true);
-      const response = await fetch('/api/memes/templates/sync-imgflip', {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to sync Imgflip templates');
-      }
-
-      const data = await response.json();
-      const changed = data.stats.created + data.stats.updated;
-      const skipped = data.stats.skipped ? ` (${data.stats.skipped} curated duplicates skipped)` : '';
-      toast.success(`Synced ${changed} templates from Imgflip${skipped}!`);
-
-      // Refresh templates
-      await fetchTemplates(sourceFilter);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to sync templates');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   return (
     <div className="glass-card border border-border p-6 rounded-xl">
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-4">Meme Templates</h3>
 
         {/* Source Filter Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
           <button
             onClick={() => setSourceFilter('all')}
             className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'all'
@@ -133,16 +104,6 @@ export function TemplateSelector({
             <Database size={14} />
             Database
           </button>
-          <button
-            onClick={() => setSourceFilter('imgflip')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${sourceFilter === 'imgflip'
-                ? 'bg-acid text-black'
-                : 'bg-surface-2 text-secondary hover:text-primary'
-              }`}
-          >
-            <Globe size={14} />
-            Imgflip
-          </button>
         </div>
 
         {/* Search Bar */}
@@ -157,15 +118,6 @@ export function TemplateSelector({
           />
         </div>
 
-        {/* Sync Imgflip Button */}
-        <button
-          onClick={handleSyncImgflip}
-          disabled={isSyncing}
-          className="w-full mt-3 px-4 py-2 bg-surface-2 hover:bg-surface-3 border border-border hover:border-acid/40 rounded-lg text-sm font-medium text-secondary hover:text-primary transition-all flex items-center justify-center gap-2"
-        >
-          <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-          {isSyncing ? 'Syncing...' : 'Sync Imgflip Templates'}
-        </button>
       </div>
 
       {/* Loading State */}
@@ -251,12 +203,7 @@ export function TemplateSelector({
 
                   {/* Source Badge */}
                   <div className="absolute top-2 left-2">
-                    {template.source === 'imgflip' ? (
-                      <div className="px-2 py-1 bg-blue-500/90 backdrop-blur-sm rounded text-[10px] font-semibold text-white flex items-center gap-1">
-                        <Globe size={10} />
-                        Imgflip
-                      </div>
-                    ) : template.source === 'database' ? (
+                    {template.source === 'database' ? (
                       <div className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm rounded text-[10px] font-semibold text-white flex items-center gap-1">
                         <Database size={10} />
                         Database

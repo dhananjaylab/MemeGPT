@@ -15,9 +15,7 @@ export interface MemeTemplate {
   preview_image_url?: string;
   image_url?: string;
   example_output?: string[];
-  source?: 'local' | 'database' | 'imgflip';
-  imgflip_id?: string;
-  box_count?: number;
+  source?: 'local' | 'database';
 }
 
 // Generated meme from API
