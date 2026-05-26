@@ -4,7 +4,6 @@
 v2 additions:
   • POST /generate/quick — synchronous fast-path (no queue, cache-first)
   • GET  /templates — now filters by source, returns Gen-Z-ready template list
-  • POST /templates/sync-imgflip — unchanged
   • GET  /proxy-image — unchanged
 """
 
@@ -12,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -30,13 +30,13 @@ from services.auth import get_current_user_optional
 from services.cache import (
     get_cached_meme_url,
     get_cached_captions,
-    set_cached_captions,
     set_cached_meme_url,
     get_cached_meme_metadata,
     set_cached_meme_metadata,
+    get_last_quick_template_id,
+    set_last_quick_template_id,
 )
 from services.compositor import overlay_text_on_image_async
-from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator
 from services.storage import upload_to_r2
 from services.template_catalog import build_template_fields
@@ -50,6 +50,7 @@ from services.worker import enqueue_meme_generation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+TEMPLATE_SOURCES = {"local", "database"}
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -121,7 +122,6 @@ class TemplateResponse(BaseModel):
     font_path: str
     usage_instructions: Optional[str] = None
     source: Optional[str] = "local"
-    imgflip_id: Optional[str] = None
 
 
 # ── Async generation helper (shared by quick + worker) ───────────────────────
@@ -134,47 +134,14 @@ async def _compose_and_upload(
     db: AsyncSession,
 ) -> GeneratedMeme:
     """Compose image, upload to storage, persist to DB, return model instance."""
-    
-    # Check if this is an Imgflip template
-    if template_dict.get("source") == "imgflip" and template_dict.get("imgflip_id"):
-        logger.info(
-            "Using Imgflip API for template %d (imgflip_id=%s)",
-            template_dict["id"], template_dict["imgflip_id"]
-        )
-        try:
-            # Use Imgflip caption API
-            imgflip_result = await imgflip_service.caption_image(
-                template_dict["imgflip_id"],
-                texts
-            )
-            image_url = imgflip_result.get("data", {}).get("url")
-            if not image_url:
-                raise RuntimeError("Imgflip API did not return image URL")
-            
-            logger.info("Imgflip API generated meme: %s", image_url[:100])
-        except Exception as imgflip_exc:
-            logger.error(
-                "Imgflip API failed for template %d: %s. Falling back to compositor.",
-                template_dict["id"], imgflip_exc
-            )
-            # Fallback to local compositor
-            image_buffer = await overlay_text_on_image_async(template_dict, texts)
-            object_key = f"memes/{uuid4()}.webp"
-            upload_result = await upload_to_r2(image_buffer, object_key)
-            image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
-            
-            if not image_url:
-                raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
-    else:
-        # Use local compositor for non-Imgflip templates
-        image_buffer = await overlay_text_on_image_async(template_dict, texts)
+    image_buffer = await overlay_text_on_image_async(template_dict, texts)
 
-        object_key = f"memes/{uuid4()}.webp"
-        upload_result = await upload_to_r2(image_buffer, object_key)
-        image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
+    object_key = f"memes/{uuid4()}.webp"
+    upload_result = await upload_to_r2(image_buffer, object_key)
+    image_url = upload_result.get("primary") if isinstance(upload_result, dict) else None
 
-        if not image_url:
-            raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
+    if not image_url:
+        raise HTTPException(status_code=503, detail="Storage service unavailable: Cloudflare R2 unreachable")
 
     meme = GeneratedMeme(
         id=str(uuid4()),
@@ -256,17 +223,18 @@ async def generate_meme_quick(
     otherwise offloads to ARQ worker and returns 202 Accepted with job_id for SSE streaming.
     """
     t0 = time.monotonic()
+    cached_quick_template_id: Optional[int] = None
+    cached_quick_texts: Optional[List[str]] = None
 
-    # ── 1. Check if we can serve instantly from cache ────────────────────────
-    if body.template_id is not None and body.captions:
-        # Manual mode
-        template_id = body.template_id
-        texts = [c.strip() for c in body.captions]
-        prompt = body.prompt or "manual"
+    async def cached_response_for_option(option: dict, prompt_text: str) -> Optional[QuickMemeResponse]:
+        template_id = int(option.get("meme_id", option.get("id")))
+        texts = option.get("meme_text") or option.get("text") or option.get("captions", [])
+        if not texts:
+            return None
 
-        # Try metadata cache first (no DB query needed)
         cached_meta = await get_cached_meme_metadata(template_id, texts)
         if cached_meta:
+            await set_last_quick_template_id(prompt_text, template_id)
             return QuickMemeResponse(
                 meme_id=cached_meta["meme_id"],
                 image_url=cached_meta["image_url"],
@@ -275,28 +243,87 @@ async def generate_meme_quick(
                 cache_hit=True,
                 generation_time_ms=int((time.monotonic() - t0) * 1000),
             )
+
+        cached_url = await get_cached_meme_url(template_id, texts)
+        if not cached_url:
+            return None
+
+        result = await db.execute(
+            select(MemeTemplate).where(
+                MemeTemplate.id == template_id,
+                MemeTemplate.source.in_(TEMPLATE_SOURCES),
+            )
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            return None
+
+        meme = GeneratedMeme(
+            id=str(uuid4()),
+            user_id=current_user.id if current_user else None,
+            prompt=prompt_text,
+            template_name=template.name,
+            template_id=template.id,
+            meme_text=texts,
+            image_url=cached_url,
+            is_public=True,
+        )
+        db.add(meme)
+        await db.commit()
+
+        await set_cached_meme_metadata(
+            template_id,
+            texts,
+            {
+                "meme_id": meme.id,
+                "template_name": template.name,
+                "image_url": cached_url,
+            },
+        )
+        await set_last_quick_template_id(prompt_text, template_id)
+
+        return QuickMemeResponse(
+            meme_id=meme.id,
+            image_url=cached_url,
+            template_name=template.name,
+            meme_text=texts,
+            cache_hit=True,
+            generation_time_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+    # ── 1. Check if we can serve instantly from cache ────────────────────────
+    if body.template_id is not None and body.captions:
+        # Manual mode
+        template_id = body.template_id
+        texts = [c.strip() for c in body.captions]
+        prompt = body.prompt or "manual"
+
+        cached_response = await cached_response_for_option(
+            {"meme_id": template_id, "meme_text": texts},
+            prompt,
+        )
+        if cached_response:
+            return cached_response
     elif body.prompt:
         prompt = body.prompt.strip()
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt cannot be empty")
 
-        cached_caps = await get_cached_captions(prompt)
+        cached_caps = await get_cached_captions(prompt, option_count=3)
         if cached_caps:
-            best = cached_caps[0]
-            template_id = int(best.get("meme_id", best.get("id")))
-            texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
-
-            # Try metadata cache first (no DB query needed)
-            cached_meta = await get_cached_meme_metadata(template_id, texts)
-            if cached_meta:
-                return QuickMemeResponse(
-                    meme_id=cached_meta["meme_id"],
-                    image_url=cached_meta["image_url"],
-                    template_name=cached_meta["template_name"],
-                    meme_text=texts,
-                    cache_hit=True,
-                    generation_time_ms=int((time.monotonic() - t0) * 1000),
-                )
+            last_template_id = await get_last_quick_template_id(prompt)
+            eligible_options = [
+                option
+                for option in cached_caps
+                if int(option.get("meme_id", option.get("id"))) != last_template_id
+            ]
+            selected = random.choice(eligible_options or cached_caps)
+            cached_response = await cached_response_for_option(selected, prompt)
+            if cached_response:
+                return cached_response
+            cached_quick_template_id = int(selected.get("meme_id", selected.get("id")))
+            cached_quick_texts = selected.get("meme_text") or selected.get("text") or selected.get("captions", [])
+            await set_last_quick_template_id(prompt, cached_quick_template_id)
     else:
         raise HTTPException(
             status_code=400,
@@ -305,15 +332,22 @@ async def generate_meme_quick(
 
     # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
     ai_provider = (body.ai_provider or "gemini").lower()
-    generation_mode = "manual" if (body.template_id is not None and body.captions) else "auto"
+    if cached_quick_template_id is not None and cached_quick_texts:
+        generation_mode = "manual"
+        manual_template_id = cached_quick_template_id
+        manual_captions = cached_quick_texts
+    else:
+        generation_mode = "manual" if (body.template_id is not None and body.captions) else "quick"
+        manual_template_id = body.template_id
+        manual_captions = body.captions
 
     job_id = await enqueue_meme_generation(
         prompt=prompt,
         user=current_user,
         ai_provider=ai_provider,
         generation_mode=generation_mode,
-        manual_template_id=body.template_id,
-        manual_captions=body.captions,
+        manual_template_id=manual_template_id,
+        manual_captions=manual_captions,
     )
 
     return JSONResponse(
@@ -517,9 +551,11 @@ async def get_templates(
     try:
         query = select(MemeTemplate)
         if source and source != "all":
-            if source not in {"local", "database", "imgflip"}:
-                raise HTTPException(status_code=400, detail="source must be local, database, imgflip, or all")
+            if source not in TEMPLATE_SOURCES:
+                raise HTTPException(status_code=400, detail="source must be local, database, or all")
             query = query.where(MemeTemplate.source == source)
+        else:
+            query = query.where(MemeTemplate.source.in_(TEMPLATE_SOURCES))
         query = query.order_by(MemeTemplate.id)
 
         result = await db.execute(query)
@@ -536,7 +572,6 @@ async def get_templates(
                 font_path=t.font_path,
                 usage_instructions=t.usage_instructions,
                 source=t.source,
-                imgflip_id=t.imgflip_id,
             )
             for t in templates
         ]
@@ -545,21 +580,14 @@ async def get_templates(
         raise HTTPException(status_code=500, detail="Failed to fetch templates")
 
 
-@router.post("/templates/sync-imgflip")
-async def sync_imgflip_templates(
-    db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
-    try:
-        stats = await imgflip_service.sync_templates_to_db(db)
-        return {"success": True, "message": "Successfully synced Imgflip templates", "stats": stats}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to sync: {str(exc)}")
-
-
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
 async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MemeTemplate).where(MemeTemplate.id == template_id))
+    result = await db.execute(
+        select(MemeTemplate).where(
+            MemeTemplate.id == template_id,
+            MemeTemplate.source.in_(TEMPLATE_SOURCES),
+        )
+    )
     t = result.scalar_one_or_none()
     if not t:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -574,7 +602,6 @@ async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
         font_path=t.font_path,
         usage_instructions=t.usage_instructions,
         source=t.source,
-        imgflip_id=t.imgflip_id,
     )
 
 

@@ -15,6 +15,7 @@ os.environ["NO_PROXY"] = "*"  # Bypass Windows WPAD 10s delay
 import asyncio
 import json
 import logging
+import random
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -30,15 +31,17 @@ from models.models import GeneratedMeme, MemeJob, MemeTemplate
 from services.cache import (
     get_cached_captions, set_cached_captions,
     get_cached_meme_url, set_cached_meme_url,
+    set_cached_meme_metadata,
+    get_last_quick_template_id, set_last_quick_template_id,
 )
 from services.compositor import overlay_text_on_image_async
-from services.imgflip import imgflip_service
 from services.meme_ai import get_caption_generator, AIProvider
 from services.storage import upload_to_r2
 from services.worker import close_arq_pool, get_arq_pool
 from services.rate_limit import get_redis
 
 logger = logging.getLogger(__name__)
+TEMPLATE_SOURCES = {"local", "database"}
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -104,9 +107,9 @@ async def get_templates_by_ids(
             "number_of_text_fields": t.number_of_text_fields,
             "image_url": t.image_url,
             "source": t.source,
-            "imgflip_id": t.imgflip_id,
         }
         for t in templates
+        if t.source in TEMPLATE_SOURCES
     }
 
 
@@ -142,15 +145,16 @@ async def process_meme_generation(
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    mode = generation_mode.lower()
     logger.info(
-        "Processing job %s provider=%s mode=%s", job_id, ai_provider, generation_mode
+        "Processing job %s provider=%s mode=%s", job_id, ai_provider, mode
     )
     # Fire-and-forget: don't await status update — start AI immediately
     asyncio.create_task(update_job_status(job_id, "processing"))
 
     try:
         # ── 1. Generate / retrieve captions ──────────────────────────────────
-        if generation_mode.lower() == "manual":
+        if mode == "manual":
             if manual_template_id is None or not manual_captions:
                 await update_job_status(
                     job_id, "failed",
@@ -165,8 +169,9 @@ async def process_meme_generation(
                 }
             ]
         else:
+            option_count = 3
             # Check caption cache first
-            cached_caps = await get_cached_captions(prompt)
+            cached_caps = await get_cached_captions(prompt, option_count=option_count)
             if cached_caps:
                 logger.info("Caption cache HIT for job %s", job_id)
                 captions = cached_caps
@@ -174,11 +179,14 @@ async def process_meme_generation(
                 provider = ai_provider.lower()
                 if provider not in {AIProvider.GEMINI.value}:
                     provider = AIProvider.GEMINI.value
-                generator = await get_caption_generator(provider)
+                generator = await get_caption_generator(
+                    provider,
+                    option_count=option_count,
+                )
                 captions = await generator(prompt)
 
                 if captions:
-                    await set_cached_captions(prompt, captions)
+                    await set_cached_captions(prompt, captions, option_count=option_count)
 
         if not captions:
             await update_job_status(
@@ -186,6 +194,15 @@ async def process_meme_generation(
                 error_message=f"AI ({ai_provider}) failed to generate captions",
             )
             return {"status": "failed"}
+
+        if mode == "quick":
+            last_template_id = await get_last_quick_template_id(prompt)
+            eligible_captions = [
+                caption
+                for caption in captions
+                if int(caption.get("meme_id", caption.get("id"))) != last_template_id
+            ]
+            captions = [random.choice(eligible_captions or captions)]
 
         # ── 2. Compose meme images (fully parallel pipeline) ──────────────────
         # Each meme: resolve_image_url → db_save runs concurrently
@@ -232,6 +249,17 @@ async def process_meme_generation(
                             is_public=True,
                         )
                     )
+                    await set_cached_meme_metadata(
+                        template_id,
+                        texts,
+                        {
+                            "meme_id": meme_id,
+                            "template_name": template["name"],
+                            "image_url": image_url,
+                        },
+                    )
+                    if mode == "quick":
+                        await set_last_quick_template_id(prompt, template_id)
                     return meme_id
 
                 except Exception as exc:
@@ -272,6 +300,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
     queue_name = settings.arq_queue_name
     max_jobs = 20          # allow more concurrent jobs
+    poll_delay = 0.1       # keep quick jobs from waiting on the default poll interval
     job_timeout = 180      # 3-minute hard cap per job (Gemini + compose + upload can be slow)
 
     @staticmethod

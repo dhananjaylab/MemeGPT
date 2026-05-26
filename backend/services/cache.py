@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 CAPTION_TTL = 3_600          # 1 h  — AI output for a given prompt
 MEME_URL_TTL = 86_400        # 24 h — final image URL for template+texts
 TEMPLATE_IMG_TTL = 21_600    # 6 h  — raw bytes of a remote template image
+QUICK_LAST_TTL = 600         # 10 min — avoid immediate repeat templates for quick regen
 
 # ── Singleton ────────────────────────────────────────────────────────────────
 _redis: Optional[aioredis.Redis] = None
@@ -51,8 +52,9 @@ def _h(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
-def caption_key(prompt: str) -> str:
-    return f"cap:{_h(prompt.lower().strip())}"
+def caption_key(prompt: str, option_count: int = 3) -> str:
+    payload = f"{option_count}|{prompt.lower().strip()}"
+    return f"cap:{_h(payload)}"
 
 
 def meme_url_key(template_id: int, texts: List[str]) -> str:
@@ -64,12 +66,19 @@ def template_img_key(url: str) -> str:
     return f"tpl:{_h(url)}"
 
 
+def quick_last_key(prompt: str) -> str:
+    return f"quick:last:{_h(prompt.lower().strip())}"
+
+
 # ── Caption cache ────────────────────────────────────────────────────────────
 
-async def get_cached_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
+async def get_cached_captions(
+    prompt: str,
+    option_count: int = 3,
+) -> Optional[List[Dict[str, Any]]]:
     try:
         r = await _get_redis()
-        raw = await r.get(caption_key(prompt))
+        raw = await r.get(caption_key(prompt, option_count))
         if raw:
             logger.debug("Caption cache HIT for prompt %r", prompt[:60])
             return json.loads(raw)
@@ -79,13 +88,33 @@ async def get_cached_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
 
 
 async def set_cached_captions(
-    prompt: str, captions: List[Dict[str, Any]]
+    prompt: str,
+    captions: List[Dict[str, Any]],
+    option_count: int = 3,
 ) -> None:
     try:
         r = await _get_redis()
-        await r.setex(caption_key(prompt), CAPTION_TTL, json.dumps(captions))
+        await r.setex(caption_key(prompt, option_count), CAPTION_TTL, json.dumps(captions))
     except Exception as exc:
         logger.warning("Caption cache set failed: %s", exc)
+
+
+async def get_last_quick_template_id(prompt: str) -> Optional[int]:
+    try:
+        r = await _get_redis()
+        raw = await r.get(quick_last_key(prompt))
+        return int(raw) if raw else None
+    except Exception as exc:
+        logger.warning("Quick last-template cache get failed: %s", exc)
+    return None
+
+
+async def set_last_quick_template_id(prompt: str, template_id: int) -> None:
+    try:
+        r = await _get_redis()
+        await r.setex(quick_last_key(prompt), QUICK_LAST_TTL, str(template_id).encode())
+    except Exception as exc:
+        logger.warning("Quick last-template cache set failed: %s", exc)
 
 
 # ── Meme URL cache ───────────────────────────────────────────────────────────

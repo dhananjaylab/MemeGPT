@@ -41,7 +41,7 @@ class MemeOutput(BaseModel):
 
 
 class MemeList(BaseModel):
-    output: List[MemeOutput] = Field(description="Exactly 3 generated meme options")
+    output: List[MemeOutput] = Field(description="Generated meme options")
 
 
 # ── Clients ───────────────────────────────────────────────────────────────────
@@ -97,10 +97,8 @@ CRITICAL: Follow the exact text field order specified in each template's usage_i
 The order matters for the meme to make sense!
 """
 
-_OUTPUT_SCHEMA_DESC = "Return a JSON object with an 'output' array containing exactly 3 meme objects."
-
-
-def _build_gemini_system(meme_data: str) -> str:
+def _build_gemini_system(meme_data: str, option_count: int = 3) -> str:
+    option_text = "1 meme option" if option_count == 1 else f"{option_count} different meme options"
     return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
 
 {_GEN_Z_CONTEXT}
@@ -108,16 +106,19 @@ def _build_gemini_system(meme_data: str) -> str:
 Available templates: {meme_data}
 
 Rules:
-- Choose 3 different templates that best fit the user's prompt
+- Choose {option_text} that best fit the user's prompt
 - **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template
 - Text must be SHORT (max 10 words per field) and punchy
 - Match the exact number of text fields per template
-- Provide exactly 3 meme options with proper structure"""
+- Provide exactly {option_count} meme option{"s" if option_count != 1 else ""} with proper structure"""
 
 
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
-async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[str, Any]]]:
+async def generate_meme_captions_with_gemini(
+    prompt: str,
+    option_count: int = 3,
+) -> Optional[List[Dict[str, Any]]]:
     if not gemini_client:
         logger.warning("Gemini client not configured")
         return None
@@ -133,8 +134,8 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
         ]
 
         config = types.GenerateContentConfig(
-            system_instruction=_build_gemini_system(meme_data),
-            max_output_tokens=4096,     # increased to prevent JSON truncation
+            system_instruction=_build_gemini_system(meme_data, option_count),
+            max_output_tokens=1536 if option_count == 1 else 4096,
             temperature=1.0,
             response_mime_type="application/json",
             response_schema=MemeList,
@@ -269,7 +270,7 @@ async def generate_meme_captions_with_gemini(prompt: str) -> Optional[List[Dict[
                     return None
                 
                 logger.info("Gemini generated %d valid memes on attempt %d", len(valid_memes), attempt + 1)
-                return valid_memes
+                return valid_memes[:option_count]
                 
             except json.JSONDecodeError as e:
                 logger.error("JSONDecodeError on Gemini attempt %d: %s. Raw output: %s", attempt + 1, e, raw[:500] if 'raw' in locals() else '')
@@ -297,13 +298,16 @@ async def _generate_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
-async def get_caption_generator(provider: Optional[str] = None):
+async def get_caption_generator(provider: Optional[str] = None, option_count: int = 3):
     """Return a caption generator using Gemini."""
     
     async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
         try:
             # 20-second timeout guard on overall generation
-            return await asyncio.wait_for(generate_meme_captions_with_gemini(prompt), timeout=20.0)
+            return await asyncio.wait_for(
+                generate_meme_captions_with_gemini(prompt, option_count=option_count),
+                timeout=20.0,
+            )
         except asyncio.TimeoutError:
             logger.error("AI caption generation timed out after 20 seconds")
             return None
