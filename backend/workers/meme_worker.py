@@ -142,15 +142,16 @@ async def process_meme_generation(
     manual_template_id: Optional[int] = None,
     manual_captions: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    mode = generation_mode.lower()
     logger.info(
-        "Processing job %s provider=%s mode=%s", job_id, ai_provider, generation_mode
+        "Processing job %s provider=%s mode=%s", job_id, ai_provider, mode
     )
     # Fire-and-forget: don't await status update — start AI immediately
     asyncio.create_task(update_job_status(job_id, "processing"))
 
     try:
         # ── 1. Generate / retrieve captions ──────────────────────────────────
-        if generation_mode.lower() == "manual":
+        if mode == "manual":
             if manual_template_id is None or not manual_captions:
                 await update_job_status(
                     job_id, "failed",
@@ -165,8 +166,9 @@ async def process_meme_generation(
                 }
             ]
         else:
+            option_count = 1 if mode == "quick" else 3
             # Check caption cache first
-            cached_caps = await get_cached_captions(prompt)
+            cached_caps = await get_cached_captions(prompt, option_count=option_count)
             if cached_caps:
                 logger.info("Caption cache HIT for job %s", job_id)
                 captions = cached_caps
@@ -174,11 +176,17 @@ async def process_meme_generation(
                 provider = ai_provider.lower()
                 if provider not in {AIProvider.GEMINI.value}:
                     provider = AIProvider.GEMINI.value
-                generator = await get_caption_generator(provider)
+                generator = await get_caption_generator(
+                    provider,
+                    option_count=option_count,
+                )
                 captions = await generator(prompt)
 
                 if captions:
-                    await set_cached_captions(prompt, captions)
+                    await set_cached_captions(prompt, captions, option_count=option_count)
+
+            if mode == "quick":
+                captions = captions[:1]
 
         if not captions:
             await update_job_status(
@@ -272,6 +280,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.arq_redis_url)
     queue_name = settings.arq_queue_name
     max_jobs = 20          # allow more concurrent jobs
+    poll_delay = 0.1       # keep quick jobs from waiting on the default poll interval
     job_timeout = 180      # 3-minute hard cap per job (Gemini + compose + upload can be slow)
 
     @staticmethod

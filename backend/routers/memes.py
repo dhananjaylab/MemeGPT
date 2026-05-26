@@ -30,7 +30,6 @@ from services.auth import get_current_user_optional
 from services.cache import (
     get_cached_meme_url,
     get_cached_captions,
-    set_cached_captions,
     set_cached_meme_url,
     get_cached_meme_metadata,
     set_cached_meme_metadata,
@@ -280,7 +279,7 @@ async def generate_meme_quick(
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt cannot be empty")
 
-        cached_caps = await get_cached_captions(prompt)
+        cached_caps = await get_cached_captions(prompt, option_count=1)
         if cached_caps:
             best = cached_caps[0]
             template_id = int(best.get("meme_id", best.get("id")))
@@ -305,7 +304,7 @@ async def generate_meme_quick(
 
     # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
     ai_provider = (body.ai_provider or "gemini").lower()
-    generation_mode = "manual" if (body.template_id is not None and body.captions) else "auto"
+    generation_mode = "manual" if (body.template_id is not None and body.captions) else "quick"
 
     job_id = await enqueue_meme_generation(
         prompt=prompt,
