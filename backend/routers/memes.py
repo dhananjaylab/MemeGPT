@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -32,6 +33,8 @@ from services.cache import (
     set_cached_meme_url,
     get_cached_meme_metadata,
     set_cached_meme_metadata,
+    get_last_quick_template_id,
+    set_last_quick_template_id,
 )
 from services.compositor import overlay_text_on_image_async
 from services.meme_ai import get_caption_generator
@@ -220,17 +223,18 @@ async def generate_meme_quick(
     otherwise offloads to ARQ worker and returns 202 Accepted with job_id for SSE streaming.
     """
     t0 = time.monotonic()
+    cached_quick_template_id: Optional[int] = None
+    cached_quick_texts: Optional[List[str]] = None
 
-    # ── 1. Check if we can serve instantly from cache ────────────────────────
-    if body.template_id is not None and body.captions:
-        # Manual mode
-        template_id = body.template_id
-        texts = [c.strip() for c in body.captions]
-        prompt = body.prompt or "manual"
+    async def cached_response_for_option(option: dict, prompt_text: str) -> Optional[QuickMemeResponse]:
+        template_id = int(option.get("meme_id", option.get("id")))
+        texts = option.get("meme_text") or option.get("text") or option.get("captions", [])
+        if not texts:
+            return None
 
-        # Try metadata cache first (no DB query needed)
         cached_meta = await get_cached_meme_metadata(template_id, texts)
         if cached_meta:
+            await set_last_quick_template_id(prompt_text, template_id)
             return QuickMemeResponse(
                 meme_id=cached_meta["meme_id"],
                 image_url=cached_meta["image_url"],
@@ -239,28 +243,87 @@ async def generate_meme_quick(
                 cache_hit=True,
                 generation_time_ms=int((time.monotonic() - t0) * 1000),
             )
+
+        cached_url = await get_cached_meme_url(template_id, texts)
+        if not cached_url:
+            return None
+
+        result = await db.execute(
+            select(MemeTemplate).where(
+                MemeTemplate.id == template_id,
+                MemeTemplate.source.in_(TEMPLATE_SOURCES),
+            )
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            return None
+
+        meme = GeneratedMeme(
+            id=str(uuid4()),
+            user_id=current_user.id if current_user else None,
+            prompt=prompt_text,
+            template_name=template.name,
+            template_id=template.id,
+            meme_text=texts,
+            image_url=cached_url,
+            is_public=True,
+        )
+        db.add(meme)
+        await db.commit()
+
+        await set_cached_meme_metadata(
+            template_id,
+            texts,
+            {
+                "meme_id": meme.id,
+                "template_name": template.name,
+                "image_url": cached_url,
+            },
+        )
+        await set_last_quick_template_id(prompt_text, template_id)
+
+        return QuickMemeResponse(
+            meme_id=meme.id,
+            image_url=cached_url,
+            template_name=template.name,
+            meme_text=texts,
+            cache_hit=True,
+            generation_time_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+    # ── 1. Check if we can serve instantly from cache ────────────────────────
+    if body.template_id is not None and body.captions:
+        # Manual mode
+        template_id = body.template_id
+        texts = [c.strip() for c in body.captions]
+        prompt = body.prompt or "manual"
+
+        cached_response = await cached_response_for_option(
+            {"meme_id": template_id, "meme_text": texts},
+            prompt,
+        )
+        if cached_response:
+            return cached_response
     elif body.prompt:
         prompt = body.prompt.strip()
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt cannot be empty")
 
-        cached_caps = await get_cached_captions(prompt, option_count=1)
+        cached_caps = await get_cached_captions(prompt, option_count=3)
         if cached_caps:
-            best = cached_caps[0]
-            template_id = int(best.get("meme_id", best.get("id")))
-            texts = best.get("meme_text") or best.get("text") or best.get("captions", [])
-
-            # Try metadata cache first (no DB query needed)
-            cached_meta = await get_cached_meme_metadata(template_id, texts)
-            if cached_meta:
-                return QuickMemeResponse(
-                    meme_id=cached_meta["meme_id"],
-                    image_url=cached_meta["image_url"],
-                    template_name=cached_meta["template_name"],
-                    meme_text=texts,
-                    cache_hit=True,
-                    generation_time_ms=int((time.monotonic() - t0) * 1000),
-                )
+            last_template_id = await get_last_quick_template_id(prompt)
+            eligible_options = [
+                option
+                for option in cached_caps
+                if int(option.get("meme_id", option.get("id"))) != last_template_id
+            ]
+            selected = random.choice(eligible_options or cached_caps)
+            cached_response = await cached_response_for_option(selected, prompt)
+            if cached_response:
+                return cached_response
+            cached_quick_template_id = int(selected.get("meme_id", selected.get("id")))
+            cached_quick_texts = selected.get("meme_text") or selected.get("text") or selected.get("captions", [])
+            await set_last_quick_template_id(prompt, cached_quick_template_id)
     else:
         raise HTTPException(
             status_code=400,
@@ -269,15 +332,22 @@ async def generate_meme_quick(
 
     # ── 2. Cache Miss — Offload to ARQ worker & return 202 Accepted ───────────
     ai_provider = (body.ai_provider or "gemini").lower()
-    generation_mode = "manual" if (body.template_id is not None and body.captions) else "quick"
+    if cached_quick_template_id is not None and cached_quick_texts:
+        generation_mode = "manual"
+        manual_template_id = cached_quick_template_id
+        manual_captions = cached_quick_texts
+    else:
+        generation_mode = "manual" if (body.template_id is not None and body.captions) else "quick"
+        manual_template_id = body.template_id
+        manual_captions = body.captions
 
     job_id = await enqueue_meme_generation(
         prompt=prompt,
         user=current_user,
         ai_provider=ai_provider,
         generation_mode=generation_mode,
-        manual_template_id=body.template_id,
-        manual_captions=body.captions,
+        manual_template_id=manual_template_id,
+        manual_captions=manual_captions,
     )
 
     return JSONResponse(
