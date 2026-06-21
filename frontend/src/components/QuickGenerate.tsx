@@ -169,7 +169,8 @@ export function QuickGenerate({ initialPrompt = '', onGenerated }: QuickGenerate
 
   const handleCopyLink = async () => {
     if (!result) return;
-    const link = `${window.location.origin}/meme/${result.meme_id}`;
+    const imageUrl = result.image_url;
+    const link = imageUrl.startsWith('http') ? imageUrl : `${window.location.origin}${imageUrl}`;
     await navigator.clipboard.writeText(link);
     toast.success('Link copied! 🔗');
   };
