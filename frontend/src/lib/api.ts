@@ -30,7 +30,24 @@ export interface QuickMemeResponse {
   generation_time_ms: number;
 }
 
+// ─── In-memory access-token store ─────────────────────────────────────────────
+//
+// SECURITY (Phase 1 remediation): the JWT used to live in localStorage,
+// which means any successful XSS on this app could read it and exfiltrate
+// a long-lived session token. It now lives only in this module-level
+// variable (cleared on full page reload) — the actual session-continuity
+// mechanism is the httpOnly refresh cookie the backend sets on
+// /api/auth/login and /api/auth/refresh, which JavaScript can never read.
+// AuthContext is the only thing that should call setAccessToken().
+let inMemoryAccessToken: string | null = null;
 
+export function setAccessToken(token: string | null): void {
+  inMemoryAccessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return inMemoryAccessToken;
+}
 
 class APIClient {
   private baseURL: string;
@@ -50,11 +67,15 @@ class APIClient {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
-    // Auto-inject auth headers from localStorage
+    // Auto-inject auth headers from the in-memory token
     const authHeaders = this.getAuthHeaders();
     
     const config: RequestInit = {
       ...options,
+      // Required so the browser sends/receives the httpOnly refresh cookie
+      // on /api/auth/* calls. Harmless for every other endpoint, which
+      // doesn't rely on cookies at all.
+      credentials: 'include',
       headers: {
         ...this.defaultHeaders,
         ...authHeaders,
@@ -101,19 +122,15 @@ class APIClient {
 
   private getAuthHeaders(token?: string): HeadersInit {
     const headers: HeadersInit = {};
-    
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
+
+    // Explicit per-call token (some pages still pass the context token
+    // through directly — kept for backward compatibility) takes priority,
+    // otherwise fall back to the in-memory token set by AuthContext.
+    const effectiveToken = token || inMemoryAccessToken;
+    if (effectiveToken) {
+      headers.Authorization = `Bearer ${effectiveToken}`;
     }
-    
-    // Try to get token from localStorage if not provided
-    if (typeof window !== 'undefined' && !token) {
-      const storedToken = localStorage.getItem('auth_token');
-      if (storedToken) {
-        headers.Authorization = `Bearer ${storedToken}`;
-      }
-    }
-    
+
     return headers;
   }
 
@@ -216,6 +233,20 @@ class APIClient {
       method: 'POST',
       headers: this.getAuthHeaders(token),
     });
+  }
+
+  /**
+   * Silently mint a new access token from the httpOnly refresh cookie.
+   * Called once on app boot (and can be retried on a 401) instead of
+   * ever reading a persisted token out of localStorage.
+   */
+  async refreshAccessToken(): Promise<{ access_token: string; token_type: string; user: User }> {
+    return this.request('/auth/refresh', { method: 'POST' });
+  }
+
+  /** Clears the httpOnly refresh cookie server-side. */
+  async logout(): Promise<{ message: string }> {
+    return this.request('/auth/logout', { method: 'POST' });
   }
 
   // Billing/Stripe
