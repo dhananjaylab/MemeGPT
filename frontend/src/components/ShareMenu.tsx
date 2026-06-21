@@ -18,7 +18,7 @@ export function ShareMenu({
 }: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const resolvedUrl = memeUrl || (meme ? `${window.location.origin}/meme/${meme.id}` : '');
+  const resolvedUrl = memeUrl || (meme ? (meme.image_url.startsWith('http') ? meme.image_url : `${window.location.origin}${meme.image_url}`) : '');
   const resolvedTitle = memeTitle || (meme ? `${meme.template_name} meme` : 'Check out this awesome meme!');
 
   const shareOptions = [
