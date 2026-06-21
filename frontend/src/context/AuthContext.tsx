@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User } from '../lib/types';
-import { apiClient } from '../lib/api';
+import { apiClient, setAccessToken } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -18,43 +18,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize from localStorage
+  // Phase 1 security remediation: the access token is never persisted to
+  // localStorage anymore (that was a direct XSS-token-theft exposure).
+  // Session continuity instead comes from the httpOnly refresh cookie the
+  // backend sets on login — on every app boot we silently try to exchange
+  // it for a fresh access token. If there's no valid cookie (new browser,
+  // logged out, cookie expired), this simply 401s and we fall back to
+  // "logged out" — no different from the old "no token in localStorage" case.
   useEffect(() => {
-    const savedToken = localStorage.getItem('auth_token');
-    const savedUser = localStorage.getItem('auth_user');
+    let cancelled = false;
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
-    
-    setIsLoading(false);
+    apiClient
+      .refreshAccessToken()
+      .then((res) => {
+        if (cancelled) return;
+        setAccessToken(res.access_token);
+        setToken(res.access_token);
+        setUser(res.user);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAccessToken(null);
+        setToken(null);
+        setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch fresh user data if token exists
-  useEffect(() => {
-    if (token && !user) {
-      apiClient.getCurrentUser(token)
-        .then(userData => {
-          setUser(userData);
-          localStorage.setItem('auth_user', JSON.stringify(userData));
-        })
-        .catch(() => logout());
-    }
-  }, [token]);
-
   const login = (newToken: string, userData: User) => {
+    // The refresh-token cookie was already set by the backend as part of
+    // whatever call produced newToken (POST /api/auth/login or the OAuth
+    // callback redirect) — we only ever hold the short-lived access token
+    // here, and only in memory.
+    setAccessToken(newToken);
     setToken(newToken);
     setUser(userData);
-    localStorage.setItem('auth_token', newToken);
-    localStorage.setItem('auth_user', JSON.stringify(userData));
   };
 
   const logout = () => {
+    apiClient.logout().catch(() => {
+      // Best-effort — even if the network call fails, clear local state
+      // and the cookie will simply expire on its own.
+    });
+    setAccessToken(null);
     setToken(null);
     setUser(null);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
     window.location.href = '/';
   };
 
