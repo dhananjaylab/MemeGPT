@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from core.config import settings
 from db.session import get_db
@@ -13,24 +13,63 @@ from services.api_key import hash_api_key
 
 security = HTTPBearer(auto_error=False)
 
+# Name of the httpOnly cookie carrying the refresh token. Kept here (rather
+# than only in config) so routers can import a single canonical constant.
+REFRESH_COOKIE_NAME = settings.refresh_cookie_name
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT access token"""
+    """Create a short-lived JWT access token.
+
+    Phase 1 change: this used to default to a 7-day expiry and was the
+    *only* token type, which is why the frontend had to keep it in
+    localStorage indefinitely (XSS exposure). It now defaults to a short
+    TTL driven by settings; see create_refresh_token() for the
+    long-lived, httpOnly-cookie-only counterpart that keeps users signed in.
+    """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=7)
-    
-    to_encode.update({"exp": expire})
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+
+    to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
     return encoded_jwt
 
 
+def create_refresh_token(user_id: str) -> str:
+    """Create a long-lived refresh token.
+
+    This is only ever transmitted as an httpOnly cookie (see
+    routers/auth.py's _set_refresh_cookie) — JavaScript never has access
+    to it, which is what actually closes the XSS-token-theft gap that
+    storing the access token in localStorage opened up.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days)
+    payload = {"sub": user_id, "type": "refresh", "exp": expire}
+    return jwt.encode(payload, settings.secret_key, algorithm="HS256")
+
+
 def verify_token(token: str) -> Optional[dict]:
-    """Verify JWT token and return payload"""
+    """Verify a JWT access token and return its payload."""
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        if payload.get("type") not in (None, "access"):
+            # Reject a refresh token presented as an access token, and
+            # vice versa — they are not interchangeable.
+            return None
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
+def verify_refresh_token(token: str) -> Optional[dict]:
+    """Verify a JWT refresh token specifically (checks the `type` claim)."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        if payload.get("type") != "refresh":
+            return None
         return payload
     except jwt.PyJWTError:
         return None
@@ -79,6 +118,24 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Require an authenticated user with the is_admin flag set.
+
+    Phase 1 security remediation: gates every destructive/administrative
+    endpoint (storage cleanup & R2 migration, job-queue cleanup, template
+    reseeding) that was previously reachable by anyone, authenticated or not.
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required for this operation",
+        )
+    return current_user
 
 
 async def get_user_by_email(email: str, db: AsyncSession) -> Optional[User]:
