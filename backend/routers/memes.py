@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_db
 from models.models import GeneratedMeme, MemeTemplate, User
-from services.auth import get_current_user_optional
+from services.auth import get_current_user_optional, get_current_admin_user
 from services.cache import (
     get_cached_meme_url,
     get_cached_captions,
@@ -706,7 +706,16 @@ async def delete_meme(
 # ── Template seeding ──────────────────────────────────────────────────────────
 
 @router.post("/seed-templates")
-async def seed_templates(db: AsyncSession = Depends(get_db)):
+async def seed_templates(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """
+    Re-seed the template catalog from meme_data.json.
+
+    SECURITY: this overwrites template rows in bulk and was previously
+    reachable by anyone. Restricted to admin accounts (Phase 1 remediation).
+    """
     meme_data_path = Path(__file__).parent.parent / "public" / "meme_data.json"
     if not meme_data_path.exists():
         raise HTTPException(status_code=500, detail="meme_data.json not found")

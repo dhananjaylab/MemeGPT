@@ -5,6 +5,14 @@ Provides admin endpoints for:
 - Storage metrics and monitoring
 - Manual cleanup operations
 - R2 migration utilities
+
+SECURITY (Phase 1 remediation): every endpoint in this router is
+destructive or discloses internal operational data, and previously had
+no authorization check at all — `current_user` was typed `Optional[User]`
+and never inspected, so any unauthenticated caller could trigger
+permanent deletion of generated meme files or kick off a full R2
+migration. All endpoints now require an authenticated admin account via
+get_current_admin_user.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +20,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from models.models import User
-from services.auth import get_current_user_optional
+from services.auth import get_current_admin_user
 from services.storage_cleanup import cleanup_service, run_scheduled_cleanup
 
 router = APIRouter()
@@ -48,7 +56,7 @@ class MigrationRequest(BaseModel):
 
 @router.get("/metrics", response_model=StorageMetricsResponse)
 async def get_storage_metrics(
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    _admin: User = Depends(get_current_admin_user),
 ):
     """
     Get current storage metrics for the output directory.
@@ -66,7 +74,7 @@ async def get_storage_metrics(
 @router.post("/cleanup/age", response_model=CleanupResponse)
 async def cleanup_by_age(
     request: CleanupRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    _admin: User = Depends(get_current_admin_user),
 ):
     """
     Remove files older than specified age.
@@ -76,6 +84,7 @@ async def cleanup_by_age(
         dry_run: If true, only report what would be deleted (default: true)
     
     Note: This endpoint is safe to call with dry_run=true to preview changes.
+    Destructive when dry_run=false — admin-only.
     """
     result = cleanup_service.cleanup_old_files(
         max_age_days=request.max_age_days,
@@ -87,7 +96,7 @@ async def cleanup_by_age(
 @router.post("/cleanup/size", response_model=CleanupResponse)
 async def cleanup_by_size(
     request: CleanupRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    _admin: User = Depends(get_current_admin_user),
 ):
     """
     Remove oldest files until total size is below target.
@@ -97,6 +106,7 @@ async def cleanup_by_size(
         dry_run: If true, only report what would be deleted (default: true)
     
     Files are deleted in order of oldest first until target size is reached.
+    Destructive when dry_run=false — admin-only.
     """
     result = cleanup_service.cleanup_by_size(
         target_size_mb=request.target_size_mb,
@@ -108,7 +118,7 @@ async def cleanup_by_size(
 @router.post("/migrate-to-r2")
 async def migrate_to_r2(
     request: MigrationRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    _admin: User = Depends(get_current_admin_user),
 ):
     """
     Migrate local files to R2 storage.
@@ -122,6 +132,7 @@ async def migrate_to_r2(
     3. Returns migration statistics
     
     Warning: This operation may take a long time for large numbers of files.
+    Admin-only.
     """
     result = await cleanup_service.migrate_to_r2(
         delete_after_upload=request.delete_after_upload
@@ -131,7 +142,7 @@ async def migrate_to_r2(
 
 @router.post("/cleanup/scheduled")
 async def run_cleanup(
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    _admin: User = Depends(get_current_admin_user),
 ):
     """
     Run the scheduled cleanup routine.
@@ -142,6 +153,8 @@ async def run_cleanup(
     3. Returns before/after metrics
     
     This is the same routine that should be run periodically via cron.
+    Admin-only — if you need this on an automated cron/Action, mint a
+    long-lived admin API key for that job rather than relaxing this check.
     """
     result = await run_scheduled_cleanup()
     return result
