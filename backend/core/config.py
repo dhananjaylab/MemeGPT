@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     secret_key: str = _UNSAFE_DEFAULT_SECRET_KEY
     allowed_hosts_raw: str = Field(default="localhost,127.0.0.1,0.0.0.0,testserver", alias="ALLOWED_HOSTS")
 
+    # Google OAuth
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+
     # JWT / session lifetimes.
     # Access tokens are intentionally short-lived; the refresh token (issued
     # as an httpOnly cookie, see services/auth.py) is what keeps the user
