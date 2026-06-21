@@ -38,11 +38,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         should_rate_limit = False
         custom_limit = None
+        is_generation = False
 
-        # Enforce generation daily limits (plan-based by default).
-        # DISABLED FOR NOW - rate limiting temporarily disabled
-        # if method == "POST" and path.startswith("/api/memes/generate"):
-        #     should_rate_limit = True
+        # Enforce generation daily + burst limits (plan-based by default).
+        #
+        # Phase 1 security/cost remediation: this was previously commented
+        # out entirely ("DISABLED FOR NOW"), meaning every call to
+        # /api/memes/generate and /api/memes/generate/quick — each of which
+        # can trigger a paid Gemini API call plus image composition/storage
+        # — was completely unbounded for any caller, authenticated or not.
+        if method == "POST" and path.startswith("/api/memes/generate"):
+            should_rate_limit = True
+            is_generation = True
 
         # Apply generous read limits for new high-read endpoints.
         if method == "GET" and path.startswith("/api/memes/templates"):
@@ -66,11 +73,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             api_key = request.headers.get("X-API-Key")
             
             try:
-                # We call rate_limit_request which will handle either User ID or IP
+                # We call rate_limit_request which will handle either User ID or IP.
+                # is_generation=True layers the short-window burst guard on
+                # top of the daily quota for generation endpoints.
                 _, remaining = await rate_limit_request(
                     request,
                     user_id=user_id,
                     custom_limit=custom_limit,
+                    is_generation=is_generation,
                 )
                 # Store in state so routers can access it (e.g. for returning remaining count in API)
                 request.state.rate_limit_remaining = remaining

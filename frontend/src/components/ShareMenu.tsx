@@ -18,7 +18,7 @@ export function ShareMenu({
 }: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const resolvedUrl = memeUrl || (meme ? `${window.location.origin}/meme/${meme.id}` : '');
+  const resolvedUrl = memeUrl || (meme ? (meme.image_url.startsWith('http') ? meme.image_url : `${window.location.origin}${meme.image_url}`) : '');
   const resolvedTitle = memeTitle || (meme ? `${meme.template_name} meme` : 'Check out this awesome meme!');
 
   const shareOptions = [
@@ -93,11 +93,11 @@ export function ShareMenu({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full right-0 mt-2 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+            className="absolute bottom-full right-0 mb-2 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden"
           >
             <div className="p-2">
               {/* Social Share Options */}

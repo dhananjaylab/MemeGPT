@@ -1,7 +1,14 @@
 import os
 from typing import List
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings
+
+
+# Placeholder values that must never survive into a production deployment.
+# Used by the post-init validator below to fail fast at startup instead of
+# silently running with a guessable secret / pointing at nowhere.
+_UNSAFE_DEFAULT_SECRET_KEY = "your-secret-key-here"
+_UNSAFE_DEFAULT_DATABASE_MARKER = "user:password@localhost"
 
 
 class Settings(BaseSettings):
@@ -21,9 +28,26 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     
     # Security
-    secret_key: str = "your-secret-key-here"
+    secret_key: str = _UNSAFE_DEFAULT_SECRET_KEY
     allowed_hosts_raw: str = Field(default="localhost,127.0.0.1,0.0.0.0,testserver", alias="ALLOWED_HOSTS")
-    
+
+    # Google OAuth
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+
+    # JWT / session lifetimes.
+    # Access tokens are intentionally short-lived; the refresh token (issued
+    # as an httpOnly cookie, see services/auth.py) is what keeps the user
+    # signed in without ever putting a long-lived credential in localStorage.
+    jwt_access_token_expire_minutes: int = Field(default=60, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
+    refresh_cookie_name: str = Field(default="refresh_token", alias="REFRESH_COOKIE_NAME")
+
+    # Generation burst limiting — short-window guard applied in addition to
+    # the existing daily quota, specifically on /api/memes/generate*.
+    generation_burst_limit: int = Field(default=5, alias="GENERATION_BURST_LIMIT")
+    generation_burst_window_seconds: int = Field(default=60, alias="GENERATION_BURST_WINDOW_SECONDS")
+
     # CORS Configuration
     cors_origins_raw: str = Field(default="http://localhost:3000,http://127.0.0.1:3000", alias="CORS_ORIGINS")
     cors_allow_credentials: bool = True
@@ -107,6 +131,38 @@ class Settings(BaseSettings):
     def has_gemini(self) -> bool:
         """Check if Gemini API key is configured"""
         return bool(self.gemini_api_key)
+
+    # ── Phase 1 security remediation ──────────────────────────────────────
+    # Fail fast at startup rather than silently serving production traffic
+    # with a guessable JWT secret or a placeholder database connection.
+    # This previously had no enforcement at all.
+    @model_validator(mode="after")
+    def _reject_unsafe_production_defaults(self) -> "Settings":
+        if not self.is_production:
+            return self
+
+        problems: List[str] = []
+
+        if self.secret_key == _UNSAFE_DEFAULT_SECRET_KEY or len(self.secret_key) < 32:
+            problems.append(
+                "SECRET_KEY is missing, default, or too short (need >= 32 chars) "
+                "while ENVIRONMENT=production."
+            )
+
+        if _UNSAFE_DEFAULT_DATABASE_MARKER in self.database_url:
+            problems.append(
+                "DATABASE_URL still points at the localhost/placeholder default "
+                "while ENVIRONMENT=production."
+            )
+
+        if problems:
+            raise ValueError(
+                "Refusing to start in production with unsafe configuration:\n  - "
+                + "\n  - ".join(problems)
+                + "\nSet these via real environment variables before deploying."
+            )
+
+        return self
 
 
 settings = Settings()

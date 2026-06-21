@@ -5,6 +5,12 @@ Tiers:
   free user  → 5  generations / day
   pro user   → 500 generations / day
   api key    → 500 generations / day (or custom)
+
+Phase 1 addition: a short-window *burst* guard (check_generation_burst_limit)
+that applies in addition to the daily quota above, specifically to
+/api/memes/generate*. The daily quota alone does nothing to stop someone
+from firing 500 generation requests in the first ten seconds of the day —
+each of which is a paid Gemini call. The burst guard closes that gap.
 """
 import time
 import hashlib
@@ -48,16 +54,17 @@ return {current, remaining}
 """
 
 
-def _window_key(identifier: str) -> str:
+def _window_key(identifier: str, prefix: str = "rl:fixed:") -> str:
     """Build a deterministic Redis key for the fixed window."""
     safe = hashlib.md5(identifier.encode()).hexdigest()[:16]
-    return f"rl:fixed:{safe}"
+    return f"{prefix}{safe}"
 
 
 async def check_rate_limit(
     identifier: str,
     limit: int,
     window_seconds: int = 86400,  # 24 hour window
+    key_prefix: str = "rl:fixed:",
 ) -> Tuple[int, int]:
     """
     Increment the counter and check against limit using an atomic fixed window Lua script.
@@ -65,7 +72,7 @@ async def check_rate_limit(
     Raises HTTP 429 if over limit.
     """
     redis = await get_redis()
-    key = _window_key(identifier)
+    key = _window_key(identifier, key_prefix)
     now = time.time()
 
     results = await redis.eval(FIXED_WINDOW_LUA, 1, key, limit, window_seconds)
@@ -75,7 +82,7 @@ async def check_rate_limit(
     if current_count > limit:
         raise HTTPException(
             status_code=429,
-            detail=f"Rate limit exceeded. You can generate {limit} memes per day on this plan.",
+            detail=f"Rate limit exceeded. Limit is {limit} requests per {window_seconds}s window.",
             headers={
                 "X-RateLimit-Limit": str(limit),
                 "X-RateLimit-Remaining": "0",
@@ -87,16 +94,33 @@ async def check_rate_limit(
     return current_count, remaining
 
 
+async def check_generation_burst_limit(identifier: str) -> None:
+    """
+    Short-window guard applied specifically to AI generation endpoints, on
+    top of (not instead of) the daily quota in check_rate_limit. Defaults to
+    settings.generation_burst_limit requests per settings.generation_burst_window_seconds.
+    """
+    await check_rate_limit(
+        identifier,
+        limit=settings.generation_burst_limit,
+        window_seconds=settings.generation_burst_window_seconds,
+        key_prefix="rl:burst:",
+    )
+
+
 async def rate_limit_request(
     request: Request, 
     user: Optional[User] = None,
     user_id: Optional[str] = None,
     db: Optional[AsyncSession] = None,
     custom_limit: Optional[int] = None,
+    is_generation: bool = False,
 ) -> Tuple[int, int]:
     """
     Determine the rate limit identifier and ceiling for a request,
-    then check + increment.
+    then check + increment. When is_generation=True, also enforces the
+    short-window burst guard (see check_generation_burst_limit) using the
+    same identifier — both checks must pass.
     """
     limit = settings.rate_limit_free
     identifier = ""
@@ -143,5 +167,11 @@ async def rate_limit_request(
 
     if custom_limit is not None:
         limit = custom_limit
+
+    # Burst guard runs first — if someone's hammering the endpoint we want
+    # to reject on the cheap 60s-window check before even consulting the
+    # (slightly heavier) daily quota.
+    if is_generation:
+        await check_generation_burst_limit(identifier)
 
     return await check_rate_limit(identifier, limit)

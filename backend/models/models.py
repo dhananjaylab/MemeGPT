@@ -20,6 +20,9 @@ class User(Base):
     daily_used: int = Column(Integer, default=0)
     api_key: Optional[str] = Column(String, nullable=True, unique=True, index=True)  # stores SHA-256 hash
     api_key_prefix: Optional[str] = Column(String, nullable=True)  # display prefix, e.g. "mgpt_ab12…"
+    # RBAC flag — gates destructive/admin-only endpoints (storage cleanup, job
+    # cleanup, template reseeding). Added in Phase 1 security remediation.
+    is_admin: bool = Column(Boolean, default=False, nullable=False, index=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     preferences: dict = Column(JSON, default={}, nullable=False)

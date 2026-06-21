@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from services.worker import get_job_status, get_queue_stats, cleanup_old_jobs
-from services.auth import get_current_user_optional
+from services.auth import get_current_user_optional, get_current_admin_user
 from services.rate_limit import get_redis
 from models.models import User
 
@@ -92,15 +92,24 @@ async def stream_job_status(
 
 @router.get("/queue/stats", response_model=QueueStatsResponse)
 async def get_queue_statistics():
-    """Get ARQ queue statistics (for monitoring)"""
+    """Get ARQ queue statistics (for monitoring). Read-only counts, kept
+    public-readable; the destructive cleanup endpoint below is admin-only."""
     
     stats = await get_queue_stats()
     return QueueStatsResponse(**stats)
 
 
 @router.post("/queue/cleanup")
-async def cleanup_old_jobs_endpoint(days_old: int = 7):
-    """Clean up old completed/failed jobs"""
+async def cleanup_old_jobs_endpoint(
+    days_old: int = 7,
+    _admin: User = Depends(get_current_admin_user),
+):
+    """
+    Clean up old completed/failed jobs.
+
+    SECURITY (Phase 1 remediation): this previously had no auth dependency
+    at all — any unauthenticated caller could wipe job history. Admin-only now.
+    """
     
     if days_old < 1:
         raise HTTPException(status_code=400, detail="days_old must be at least 1")
