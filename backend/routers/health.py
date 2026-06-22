@@ -33,6 +33,11 @@ class HealthChecker:
     
     def __init__(self):
         self._redis_client: Optional[redis.Redis] = None
+        # Phase 2: short TTL cache for check_system_resources(), see that
+        # method for why this exists.
+        self._system_cache: Optional[Dict[str, Any]] = None
+        self._system_cache_at: float = 0.0
+        self._system_cache_ttl: float = 5.0  # seconds
     
     async def get_redis_client(self) -> redis.Redis:
         """Get Redis client with connection reuse and timeout"""
@@ -261,10 +266,47 @@ class HealthChecker:
             }
     
     async def check_system_resources(self) -> Dict[str, Any]:
-        """Check system resource usage"""
+        """
+        Check system resource usage.
+
+        Phase 2 remediation: this used to call psutil.cpu_percent(interval=1)
+        directly inside this async method with no executor — that call
+        blocks its calling thread for a full second, and since this is the
+        only event loop in the process, EVERY other concurrent request being
+        served by this worker stalled for that second too, on every single
+        call to /api/health/detailed (which k8s readiness/liveness probes
+        hit frequently). Fixed by:
+          1. Using interval=None (non-blocking — compares against the last
+             call instead of sleeping), and
+          2. Running the still-synchronous psutil calls in a thread executor
+             so they can never block the event loop even if a future psutil
+             version reintroduces blocking behavior, and
+          3. Caching the result for a few seconds so back-to-back probes
+             don't repeatedly pay even the executor round-trip cost.
+
+        Note: interval=None means the very first sample after process start
+        is meaningless (0.0 or a stale comparison) — it self-corrects within
+        one cache TTL once a couple of calls have happened, which is fine for
+        a continuously-polled health endpoint.
+        """
+        now = time.monotonic()
+        if self._system_cache is not None and (now - self._system_cache_at) < self._system_cache_ttl:
+            return self._system_cache
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, self._sample_system_resources)
+
+        self._system_cache = result
+        self._system_cache_at = now
+        return result
+
+    @staticmethod
+    def _sample_system_resources() -> Dict[str, Any]:
+        """Synchronous psutil sampling — only ever called via run_in_executor."""
         try:
-            # CPU usage
-            cpu_percent = psutil.cpu_percent(interval=1)
+            # interval=None: instantaneous, non-blocking comparison against
+            # the last call. Never sleeps the calling thread.
+            cpu_percent = psutil.cpu_percent(interval=None)
             
             # Memory usage
             memory = psutil.virtual_memory()
