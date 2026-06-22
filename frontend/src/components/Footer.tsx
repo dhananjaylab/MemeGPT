@@ -45,14 +45,24 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Legal */}
+          {/* Integrations — Phase 2 honesty fix: these previously linked to
+              "#" while presented as live features (Stripe is real; Reddit/
+              Discord Bot/Slack App are not implemented). Stripe stays a
+              real link-equivalent item; the rest are clearly marked as
+              not-yet-shipped instead of looking like dead/broken links. */}
           <div>
             <h4 className="font-mono text-[10px] uppercase tracking-widest text-acid mb-4">Integrations</h4>
             <ul className="space-y-2 text-sm">
               <li><a href="#" className="flex items-center gap-1 text-muted hover:text-acid transition-colors group">Stripe <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></a></li>
-              <li><a href="#" className="flex items-center gap-1 text-muted hover:text-acid transition-colors group">Reddit <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></a></li>
-              <li><a href="#" className="flex items-center gap-1 text-muted hover:text-acid transition-colors group">Discord Bot <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></a></li>
-              <li><a href="#" className="flex items-center gap-1 text-muted hover:text-acid transition-colors group">Slack App <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></a></li>
+              <li className="flex items-center gap-2 text-muted/60 cursor-default" title="Not yet available">
+                Reddit <span className="text-[9px] uppercase tracking-wider bg-surface-3 text-muted px-1.5 py-0.5 rounded">Coming Soon</span>
+              </li>
+              <li className="flex items-center gap-2 text-muted/60 cursor-default" title="Not yet available">
+                Discord Bot <span className="text-[9px] uppercase tracking-wider bg-surface-3 text-muted px-1.5 py-0.5 rounded">Coming Soon</span>
+              </li>
+              <li className="flex items-center gap-2 text-muted/60 cursor-default" title="Not yet available">
+                Slack App <span className="text-[9px] uppercase tracking-wider bg-surface-3 text-muted px-1.5 py-0.5 rounded">Coming Soon</span>
+              </li>
             </ul>
           </div>
         </div>
