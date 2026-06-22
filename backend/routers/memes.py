@@ -9,6 +9,7 @@ v2 additions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
@@ -38,6 +39,7 @@ from services.cache import (
 )
 from services.compositor import overlay_text_on_image_async
 from services.meme_ai import get_caption_generator
+from services.moderation import moderate_captions
 from services.storage import upload_to_r2
 from services.template_catalog import build_template_fields
 from services.trending import (
@@ -133,8 +135,18 @@ async def _compose_and_upload(
     user_id: Optional[str],
     db: AsyncSession,
 ) -> GeneratedMeme:
-    """Compose image, upload to storage, persist to DB, return model instance."""
-    image_buffer = await overlay_text_on_image_async(template_dict, texts)
+    """Compose image, upload to storage, moderate, persist to DB, return model instance.
+
+    Phase 2: moderation runs concurrently with image composition (they're
+    independent — moderation only needs the caption text) so the safety
+    gate doesn't add serial latency on top of generation. The image is
+    still composed/stored even if flagged — moderation only gates
+    `is_public`, so a flagged meme stays visible to its own creator and in
+    the admin review queue rather than just vanishing.
+    """
+    compose_task = overlay_text_on_image_async(template_dict, texts)
+    moderation_task = moderate_captions(texts)
+    image_buffer, moderation = await asyncio.gather(compose_task, moderation_task)
 
     object_key = f"memes/{uuid4()}.webp"
     upload_result = await upload_to_r2(image_buffer, object_key)
@@ -151,19 +163,26 @@ async def _compose_and_upload(
         template_id=template_dict["id"],
         meme_text=texts,
         image_url=image_url,
-        is_public=True,
+        is_public=moderation.approved,
+        moderation_status="approved" if moderation.approved else "flagged",
+        moderation_reason=moderation.reason or None,
     )
     db.add(meme)
     await db.commit()
     
-    # Cache the metadata to eliminate DB queries on future cache hits
-    meme_metadata = {
-        "meme_id": meme.id,
-        "template_name": meme.template_name,
-        "image_url": image_url,
-    }
-    await set_cached_meme_metadata(template_dict["id"], texts, meme_metadata)
-    await set_cached_meme_url(template_dict["id"], texts, image_url)
+    # Cache the metadata to eliminate DB queries on future cache hits.
+    # Only cache (and therefore only let future identical-prompt requests
+    # instantly reuse) approved memes — an approved cache hit short-circuits
+    # straight past moderation entirely on repeat, which is correct since
+    # it's the exact same already-approved text+template pairing.
+    if moderation.approved:
+        meme_metadata = {
+            "meme_id": meme.id,
+            "template_name": meme.template_name,
+            "image_url": image_url,
+        }
+        await set_cached_meme_metadata(template_dict["id"], texts, meme_metadata)
+        await set_cached_meme_url(template_dict["id"], texts, image_url)
     
     return meme
 
@@ -267,6 +286,10 @@ async def generate_meme_quick(
             meme_text=texts,
             image_url=cached_url,
             is_public=True,
+            # set_cached_meme_url() is only ever called for moderation-approved
+            # content (see _compose_and_upload) — a cache hit here means this
+            # exact template+text pairing already passed moderation once.
+            moderation_status="approved",
         )
         db.add(meme)
         await db.commit()
@@ -603,6 +626,110 @@ async def get_template(template_id: int, db: AsyncSession = Depends(get_db)):
         usage_instructions=t.usage_instructions,
         source=t.source,
     )
+
+
+# ── Moderation review queue (admin-only) ──────────────────────────────────────
+
+class FlaggedMemeResponse(BaseModel):
+    id: str
+    template_name: str
+    prompt: str
+    meme_text: List[str]
+    image_url: str
+    moderation_status: str
+    moderation_reason: Optional[str] = None
+    created_at: str
+
+
+class FlaggedMemeListResponse(BaseModel):
+    memes: List[FlaggedMemeResponse]
+    total: int
+
+
+@router.get("/moderation/flagged", response_model=FlaggedMemeListResponse)
+async def list_flagged_memes(
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """
+    Admin review queue for memes that failed the moderation pass (see
+    services/moderation.py). These are not public — visible here and to
+    their own creator only, until an admin approves or rejects them.
+    """
+    page = max(1, page)
+    limit = min(100, limit)
+    offset = (page - 1) * limit
+
+    query = (
+        select(GeneratedMeme)
+        .where(GeneratedMeme.moderation_status == "flagged")
+        .order_by(desc(GeneratedMeme.created_at))
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    memes = result.scalars().all()
+
+    count_q = select(func.count()).select_from(GeneratedMeme).where(
+        GeneratedMeme.moderation_status == "flagged"
+    )
+    total = (await db.execute(count_q)).scalar() or 0
+
+    return FlaggedMemeListResponse(
+        memes=[
+            FlaggedMemeResponse(
+                id=m.id,
+                template_name=m.template_name,
+                prompt=m.prompt,
+                meme_text=m.meme_text,
+                image_url=m.image_url,
+                moderation_status=m.moderation_status,
+                moderation_reason=m.moderation_reason,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in memes
+        ],
+        total=total,
+    )
+
+
+@router.post("/{meme_id}/moderation/approve")
+async def approve_flagged_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Admin override: publish a flagged meme."""
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+
+    meme.moderation_status = "approved"
+    meme.is_public = True
+    await db.commit()
+    return {"message": "Meme approved and published", "meme_id": meme.id}
+
+
+@router.post("/{meme_id}/moderation/reject")
+async def reject_flagged_meme(
+    meme_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Admin override: permanently reject a flagged meme. Keeps the row
+    (and image) for audit purposes but ensures it can never become public."""
+    result = await db.execute(select(GeneratedMeme).where(GeneratedMeme.id == meme_id))
+    meme = result.scalar_one_or_none()
+    if not meme:
+        raise HTTPException(status_code=404, detail="Meme not found")
+
+    meme.moderation_status = "rejected"
+    meme.is_public = False
+    await db.commit()
+    return {"message": "Meme rejected", "meme_id": meme.id}
 
 
 # ── Individual meme actions ───────────────────────────────────────────────────
