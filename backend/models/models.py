@@ -61,6 +61,12 @@ class GeneratedMeme(Base):
     like_count: int = Column(Integer, default=0, index=True)
     trending_score: float = Column(Float, default=0.0, nullable=False, index=True)
     is_public: bool = Column(Boolean, default=True, index=True)
+    # Phase 2: moderation gate. "pending" | "approved" | "flagged" | "rejected".
+    # is_public is only ever True when moderation_status == "approved" — see
+    # services/moderation.py and the _compose_and_upload / _compose_one_meme
+    # call sites that set both together.
+    moderation_status: str = Column(String, default="pending", nullable=False, index=True)
+    moderation_reason: Optional[str] = Column(String, nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     user = relationship("User", back_populates="memes")

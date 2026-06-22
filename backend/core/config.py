@@ -22,7 +22,38 @@ class Settings(BaseSettings):
     
     # Google Gemini
     gemini_api_key: str = ""
-    ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" only
+    ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" preferred; "anthropic" is an automatic fallback, not user-selectable
+
+    # Google OAuth
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+
+    # Anthropic — Phase 2: actually wired up as a Gemini fallback now (see
+    # services/meme_ai.py). The key was configured in every .env file from
+    # day one but never used by any code path.
+    anthropic_api_key: str = ""
+    anthropic_model: str = Field(default="claude-3-sonnet-20240229", alias="ANTHROPIC_MODEL")
+
+    @property
+    def has_anthropic(self) -> bool:
+        return bool(self.anthropic_api_key)
+
+    # Observability — Phase 2: these were referenced in every .env* file
+    # and sentry-sdk/structlog were declared dependencies, but nothing ever
+    # called sentry_sdk.init() or configured structlog. See core/sentry.py
+    # and core/logging.py.
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+    sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    # Content moderation — Phase 2: gates is_public on generated memes.
+    # See services/moderation.py for the full rationale.
+    moderation_enabled: bool = Field(default=True, alias="MODERATION_ENABLED")
+    # Fail-OPEN by default: if the moderation provider itself is down,
+    # generation still succeeds (just unreviewed) rather than taking down
+    # 100% of generation on a moderation-provider outage. Flip to True once
+    # you've measured how often that actually happens for your traffic.
+    moderation_fail_closed: bool = Field(default=False, alias="MODERATION_FAIL_CLOSED")
     
     # Frontend
     frontend_url: str = "http://localhost:3000"
@@ -30,10 +61,6 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = _UNSAFE_DEFAULT_SECRET_KEY
     allowed_hosts_raw: str = Field(default="localhost,127.0.0.1,0.0.0.0,testserver", alias="ALLOWED_HOSTS")
-
-    # Google OAuth
-    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
-    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
 
     # JWT / session lifetimes.
     # Access tokens are intentionally short-lived; the refresh token (issued

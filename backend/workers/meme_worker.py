@@ -205,7 +205,7 @@ async def process_meme_generation(
             captions = [random.choice(eligible_captions or captions)]
 
         # ── 2. Compose meme images (fully parallel pipeline) ──────────────────
-        # Each meme: resolve_image_url → db_save runs concurrently
+        # Each meme: resolve_image_url → moderate → db_save runs concurrently
         meme_ids: List[str] = []
 
         async with db_session.AsyncSessionLocal() as db:
@@ -222,7 +222,7 @@ async def process_meme_generation(
             async def _compose_one_meme(
                 ai_meme: Dict[str, Any],
             ) -> Optional[str]:
-                """Resolve image URL for one meme and persist it; returns meme_id or None."""
+                """Resolve image URL for one meme, moderate, and persist it; returns meme_id or None."""
                 try:
                     template_id = int(ai_meme["meme_id"])
                     template = templates_map.get(template_id)
@@ -231,7 +231,17 @@ async def process_meme_generation(
                         return None
 
                     texts: List[str] = ai_meme["meme_text"]
-                    image_url = await _resolve_image_url(template, texts, job_id)
+
+                    # Phase 2: moderation gate. Image resolution (which may
+                    # be a cache hit and therefore near-free) and moderation
+                    # classification are independent, so run them
+                    # concurrently rather than stacking their latencies.
+                    from services.moderation import moderate_captions
+
+                    image_url, moderation = await asyncio.gather(
+                        _resolve_image_url(template, texts, job_id),
+                        moderate_captions(texts),
+                    )
                     if not image_url:
                         logger.error("Failed to resolve image URL for template %d job %s", template_id, job_id)
                         return None
@@ -246,18 +256,24 @@ async def process_meme_generation(
                             template_id=template["id"],
                             meme_text=texts,
                             image_url=image_url,
-                            is_public=True,
+                            is_public=moderation.approved,
+                            moderation_status="approved" if moderation.approved else "flagged",
+                            moderation_reason=moderation.reason or None,
                         )
                     )
-                    await set_cached_meme_metadata(
-                        template_id,
-                        texts,
-                        {
-                            "meme_id": meme_id,
-                            "template_name": template["name"],
-                            "image_url": image_url,
-                        },
-                    )
+                    # Only cache (and so only let future identical
+                    # template+text pairs instantly reuse) approved memes —
+                    # see the matching comment in routers/memes.py.
+                    if moderation.approved:
+                        await set_cached_meme_metadata(
+                            template_id,
+                            texts,
+                            {
+                                "meme_id": meme_id,
+                                "template_name": template["name"],
+                                "image_url": image_url,
+                            },
+                        )
                     if mode == "quick":
                         await set_last_quick_template_id(prompt, template_id)
                     return meme_id

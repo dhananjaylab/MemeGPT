@@ -24,10 +24,11 @@ export function TrendingTopics({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [dataSource, setDataSource] = useState<string>('curated');
 
   useEffect(() => {
     const fetchTopics = async () => {
-      const endpoint = `/api/trending/topics?limit=${maxItems}`;
+      const endpoint = `/api/v1/trending/topics?limit=${maxItems}`;
       try {
         setIsLoading(true);
         const response = await fetch(endpoint);
@@ -36,6 +37,7 @@ export function TrendingTopics({
         }
         const data = await response.json();
         setTopics(data.topics || []);
+        setDataSource(data.source || 'curated');
       } catch (err) {
         console.error('Error fetching trending topics:', err);
         setError(err instanceof Error ? err.message : 'Failed to load trending topics');
@@ -135,7 +137,9 @@ export function TrendingTopics({
       </div>
 
       <p className="text-xs text-muted text-center mt-4 pt-3 border-t border-border">
-        Refreshes every 5 minutes
+        {dataSource === 'database'
+          ? 'Based on real recent activity · refreshes every 5 minutes'
+          : 'Curated picks to spark ideas · refreshes every 5 minutes'}
       </p>
     </div>
   );

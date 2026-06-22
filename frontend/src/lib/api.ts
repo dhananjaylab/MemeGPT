@@ -54,8 +54,11 @@ class APIClient {
   private defaultHeaders: HeadersInit;
 
   constructor(baseURL: string = '') {
-    // In Vite, we'll use /api as the prefix which our vite.config proxy will handle
-    this.baseURL = baseURL || '/api';
+    // Phase 2: switched to the versioned /api/v1 prefix now that the
+    // backend mounts both /api/v1 (canonical) and /api (legacy alias, kept
+    // for any other existing integrations — see backend/main.py). Vite's
+    // dev proxy (vite.config.ts) forwards both unchanged.
+    this.baseURL = baseURL || '/api/v1';
     this.defaultHeaders = {
       'Content-Type': 'application/json',
     };
