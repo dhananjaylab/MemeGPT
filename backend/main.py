@@ -6,6 +6,18 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Phase 2: logging + Sentry must be configured before the FastAPI app (and
+# anything that might log during import) is constructed — previously
+# neither was ever wired up despite both being declared dependencies and
+# SENTRY_DSN being set in every .env* file.
+from core.logging import configure_logging, get_logger
+from core.sentry import init_sentry
+
+configure_logging()
+init_sentry()
+
+logger = get_logger(__name__)
+
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -36,7 +48,7 @@ async def seed_templates_if_needed() -> None:
 
             meme_data_path = Path(__file__).parent / "public" / "meme_data.json"
             if not meme_data_path.exists():
-                print("[WARNING] meme_data.json not found — skipping template seeding")
+                logger.warning("meme_data_json_missing", path=str(meme_data_path))
                 return
 
             with open(meme_data_path, encoding="utf-8") as f:
@@ -59,13 +71,13 @@ async def seed_templates_if_needed() -> None:
                     added += 1
 
             await db.commit()
-            print(f"[OK] Template catalog ready. Added {added}, updated {updated}.")
+            logger.info("template_catalog_ready", added=added, updated=updated)
         finally:
             await db.close()
 
     except Exception as exc:
-        print(f"[WARNING] Template seeding failed: {exc}")
-        print("          Templates can be seeded via POST /api/memes/seed-templates")
+        logger.error("template_seeding_failed", error=str(exc))
+        logger.info("templates_can_be_seeded_via", endpoint="POST /api/v1/memes/seed-templates (admin-only)")
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -82,7 +94,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         await seed_templates_if_needed()
     except Exception as exc:
-        print(f"[WARNING] DB init failed: {exc}")
+        logger.error("db_init_failed", error=str(exc))
 
     yield
 
@@ -90,15 +102,15 @@ async def lifespan(app: FastAPI):
         from routers.health import cleanup_health_checker
         await cleanup_health_checker()
     except Exception as exc:
-        print(f"[WARNING] Shutdown cleanup error: {exc}")
+        logger.error("shutdown_cleanup_error", error=str(exc))
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="MemeGPT API",
-    version="2.1.0",
-    description="AI meme generation API — Gen-Z edition powered by Google Gemini",
+    version="2.2.0",
+    description="AI meme generation API — Gen-Z edition powered by Google Gemini, with Anthropic fallback",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -110,17 +122,35 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 register_middleware(app)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+#
+# Phase 2: introduced /api/v1 as the canonical, documented API surface.
+# Every router is ALSO still mounted under the legacy unversioned /api
+# prefix (include_in_schema=False so it doesn't clutter /docs) — existing
+# API-plan integrations hitting /api/... directly keep working unchanged.
+# core.middleware.DeprecatedApiAliasMiddleware tags those legacy responses
+# with Deprecation/Link headers pointing at the /api/v1 successor. The
+# frontend (frontend/src/lib/api.ts) has already been switched to call
+# /api/v1 directly.
 
-app.include_router(health.router,        prefix="/api",          tags=["health"])
-app.include_router(auth.router,          prefix="/api/auth",     tags=["auth"])
-app.include_router(memes.router,         prefix="/api/memes",    tags=["memes"])
-app.include_router(jobs.router,          prefix="/api/jobs",     tags=["jobs"])
-app.include_router(trending.router,      prefix="/api/trending", tags=["trending"])
-app.include_router(ai.router,            prefix="/api/ai",       tags=["ai"])
-app.include_router(stripe_router.router, prefix="/api/stripe",   tags=["billing"])
-app.include_router(users.router,         prefix="/api/auth",     tags=["users"])
-app.include_router(users.router,         prefix="/api/users",    tags=["users"])
-app.include_router(storage.router,       prefix="/api/storage",  tags=["storage"])
+API_V1_PREFIX = "/api/v1"
+API_LEGACY_PREFIX = "/api"
+
+
+def _mount_routers(prefix: str, include_in_schema: bool) -> None:
+    app.include_router(health.router,        prefix=f"{prefix}",          tags=["health"],   include_in_schema=include_in_schema)
+    app.include_router(auth.router,          prefix=f"{prefix}/auth",     tags=["auth"],     include_in_schema=include_in_schema)
+    app.include_router(memes.router,         prefix=f"{prefix}/memes",    tags=["memes"],    include_in_schema=include_in_schema)
+    app.include_router(jobs.router,          prefix=f"{prefix}/jobs",     tags=["jobs"],     include_in_schema=include_in_schema)
+    app.include_router(trending.router,      prefix=f"{prefix}/trending", tags=["trending"], include_in_schema=include_in_schema)
+    app.include_router(ai.router,            prefix=f"{prefix}/ai",       tags=["ai"],       include_in_schema=include_in_schema)
+    app.include_router(stripe_router.router, prefix=f"{prefix}/stripe",   tags=["billing"],  include_in_schema=include_in_schema)
+    app.include_router(users.router,         prefix=f"{prefix}/auth",     tags=["users"],    include_in_schema=include_in_schema)
+    app.include_router(users.router,         prefix=f"{prefix}/users",    tags=["users"],    include_in_schema=include_in_schema)
+    app.include_router(storage.router,       prefix=f"{prefix}/storage",  tags=["storage"],  include_in_schema=include_in_schema)
+
+
+_mount_routers(API_V1_PREFIX, include_in_schema=True)
+_mount_routers(API_LEGACY_PREFIX, include_in_schema=False)
 
 # ── Static files ──────────────────────────────────────────────────────────────
 
@@ -134,6 +164,6 @@ for _name, _path in [
 ]:
     if _path.exists():
         app.mount(f"/{_name}", StaticFiles(directory=str(_path)), name=_name)
-        print(f"[OK] Mounted /{_name} -> {_path}")
+        logger.info("static_mounted", route=f"/{_name}", path=str(_path))
     else:
-        print(f"[WARNING] Static dir not found: {_path}")
+        logger.warning("static_dir_not_found", path=str(_path))
