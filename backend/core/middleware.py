@@ -2,14 +2,67 @@ from fastapi import FastAPI, Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import time
+import uuid
 import logging
 from typing import Optional
+
+import structlog
 
 from services.rate_limit import rate_limit_request
 from services.auth import verify_token
 from core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """
+    Generates (or propagates) an X-Request-ID and binds it into structlog's
+    contextvars for the lifetime of the request, so every log line emitted
+    while handling this request — from any module — carries the same
+    request_id without having to thread it through every function call
+    manually. Also tags it onto the Sentry scope when Sentry is active.
+
+    Phase 2 addition: this is the "request-scoped structured logging,
+    correlate with a request-ID header" piece of the observability plan.
+    Registered outermost (first) so the ID is available to every other
+    middleware and route handler.
+    """
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+
+        try:
+            import sentry_sdk
+            sentry_sdk.set_tag("request_id", request_id)
+        except ImportError:
+            pass
+
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+class DeprecatedApiAliasMiddleware(BaseHTTPMiddleware):
+    """
+    Tags responses served from the unversioned /api/* alias with standard
+    deprecation headers, pointing at the canonical /api/v1/* successor.
+
+    Phase 2 addition: main.py now mounts every router under both /api/v1
+    and (for backward compatibility with any existing API-plan integrations)
+    the legacy unversioned /api prefix. This middleware is what actually
+    communicates the deprecation to callers without breaking them.
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/api/") and not path.startswith("/api/v1/"):
+            response.headers["Deprecation"] = "true"
+            response.headers["Link"] = (
+                f'<{path.replace("/api/", "/api/v1/", 1)}>; rel="successor-version"'
+            )
+        return response
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -28,12 +81,31 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _normalize_api_path(path: str) -> str:
+    """
+    Strip a leading /api/v1 or /api prefix so the route-matching checks
+    below only need to be written once and apply identically regardless of
+    which version prefix a given request came in on.
+
+    This matters: without it, a request to /api/v1/memes/generate would
+    silently skip rate limiting entirely (since the checks only matched
+    "/api/memes/generate"), which would quietly reopen the exact cost/abuse
+    exposure Phase 1 closed, the moment any caller — including this
+    project's own frontend — starts using the new /api/v1 prefix.
+    """
+    if path.startswith("/api/v1/"):
+        return path[len("/api/v1"):]
+    if path.startswith("/api/"):
+        return path[len("/api"):]
+    return path
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Middleware to apply rate limiting to specific API routes.
     """
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+        path = _normalize_api_path(request.url.path)
         method = request.method
 
         should_rate_limit = False
@@ -47,16 +119,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # /api/memes/generate and /api/memes/generate/quick — each of which
         # can trigger a paid Gemini API call plus image composition/storage
         # — was completely unbounded for any caller, authenticated or not.
-        if method == "POST" and path.startswith("/api/memes/generate"):
+        if method == "POST" and path.startswith("/memes/generate"):
             should_rate_limit = True
             is_generation = True
 
         # Apply generous read limits for new high-read endpoints.
-        if method == "GET" and path.startswith("/api/memes/templates"):
+        if method == "GET" and path.startswith("/memes/templates"):
             should_rate_limit = True
             custom_limit = settings.rate_limit_templates_read
 
-        if method == "GET" and path.startswith("/api/trending/topics"):
+        if method == "GET" and path.startswith("/trending/topics"):
             should_rate_limit = True
             custom_limit = settings.rate_limit_trending_read
 
@@ -95,10 +167,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def register_middleware(app: FastAPI):
-    """Register all middleware for the FastAPI app"""
+    """Register all middleware for the FastAPI app.
+
+    Order matters: Starlette applies middleware in reverse registration
+    order to the request, so the LAST one added here runs FIRST. We want
+    RequestIDMiddleware to run first of all (so request_id is bound before
+    anything else logs), which is why it's added last.
+    """
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(DeprecatedApiAliasMiddleware)
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(RequestIDMiddleware)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
