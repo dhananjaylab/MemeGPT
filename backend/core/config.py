@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" preferred; "anthropic" is an automatic fallback, not user-selectable
 
+    # Google OAuth
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+
     # Anthropic — Phase 2: actually wired up as a Gemini fallback now (see
     # services/meme_ai.py). The key was configured in every .env file from
     # day one but never used by any code path.
