@@ -1,9 +1,22 @@
 """
-AI caption generator — uses Google Gemini.
+AI caption generator — Gemini primary, Anthropic automatic fallback.
 
 v2 enhancements:
   • Gen-Z cultural context injected into the system prompt
   • Structured JSON output with reasoning field
+
+Phase 2 enhancements:
+  • Anthropic fallback (services/meme_ai.py previously had ANTHROPIC_API_KEY
+    configured in every env file but no code path ever used it — a Gemini
+    outage took down 100% of generation).
+  • Gemini safety thresholds tightened from BLOCK_ONLY_HIGH to
+    BLOCK_MEDIUM_AND_ABOVE on every category — BLOCK_ONLY_HIGH was the most
+    permissive tier available and let a meaningful amount of medium-severity
+    content straight through with nothing downstream reviewing it.
+  • A small circuit breaker (services/circuit_breaker.py) stops every
+    request from individually waiting out a 20s timeout against a Gemini
+    outage before falling back — after a few consecutive failures it skips
+    straight to Anthropic until a recovery window has passed.
 """
 
 from __future__ import annotations
@@ -19,6 +32,7 @@ from google import genai
 from google.genai import types
 
 from core.config import settings
+from services.circuit_breaker import CircuitBreaker
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +43,10 @@ ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
 
 class AIProvider(str, Enum):
     GEMINI = "gemini"
+    # Not user-selectable via the API (routers still validate ai_provider
+    # == "gemini" on incoming requests) — this is purely the internal
+    # fallback target when Gemini is failing. See get_caption_generator().
+    ANTHROPIC = "anthropic"
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -48,6 +66,20 @@ class MemeList(BaseModel):
 gemini_client = genai.Client(
     api_key=settings.gemini_api_key
 ) if settings.gemini_api_key else None
+
+try:
+    import anthropic
+    anthropic_client: Optional["anthropic.AsyncAnthropic"] = (
+        anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        if settings.has_anthropic else None
+    )
+except ImportError:
+    anthropic = None  # type: ignore
+    anthropic_client = None
+
+# Trips after 3 consecutive Gemini failures, stays open for 30s before
+# allowing a single recovery probe. Process-local — see CircuitBreaker docstring.
+_gemini_circuit = CircuitBreaker(failure_threshold=3, recovery_timeout_seconds=30.0)
 
 
 # ── Template data ─────────────────────────────────────────────────────────────
@@ -113,6 +145,25 @@ Rules:
 - Provide exactly {option_count} meme option{"s" if option_count != 1 else ""} with proper structure"""
 
 
+def _build_anthropic_system(meme_data: str, option_count: int = 3) -> str:
+    option_text = "1 meme option" if option_count == 1 else f"{option_count} different meme options"
+    return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
+
+{_GEN_Z_CONTEXT}
+
+Available templates: {meme_data}
+
+Rules:
+- Choose {option_text} that best fit the user's prompt
+- **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template
+- Text must be SHORT (max 10 words per field) and punchy
+- Match the exact number of text fields per template
+- Provide exactly {option_count} meme option{"s" if option_count != 1 else ""}
+
+Respond with ONLY a raw JSON object of this exact shape, no markdown fences, no commentary:
+{{"output": [{{"meme_id": <int>, "meme_name": "<string>", "meme_text": ["<string>", ...], "reasoning": "<string>"}}]}}"""
+
+
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
 async def generate_meme_captions_with_gemini(
@@ -125,12 +176,17 @@ async def generate_meme_captions_with_gemini(
 
     meme_data = load_meme_data()
     try:
-        # Configure safety settings to be more permissive for meme humor
+        # Phase 2: tightened from BLOCK_ONLY_HIGH (the most permissive tier)
+        # to BLOCK_MEDIUM_AND_ABOVE on every category. This still allows
+        # raunchy/edgy meme humor through but no longer waves through
+        # medium-severity content with nothing downstream reviewing it.
+        # services/moderation.py adds a second, independent check on top of
+        # this for anything that does get through.
         safety_settings = [
-            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
-            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
-            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
-            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
         ]
 
         config = types.GenerateContentConfig(
@@ -292,27 +348,147 @@ async def generate_meme_captions_with_gemini(
         return None
 
 
-async def _generate_captions(prompt: str) -> Optional[List[Dict[str, Any]]]:
-    """Generate captions using Gemini."""
-    return await generate_meme_captions_with_gemini(prompt)
+# ── Anthropic (Phase 2 — Gemini fallback) ─────────────────────────────────────
+
+async def generate_meme_captions_with_anthropic(
+    prompt: str,
+    option_count: int = 3,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fallback caption generator. Same contract/return shape as the Gemini
+    function above. Invoked automatically by get_caption_generator() when
+    Gemini is failing or its circuit breaker is open — not selected by
+    default otherwise, since Gemini remains the cheaper/primary provider
+    for this workload.
+    """
+    if not anthropic_client:
+        logger.warning("Anthropic client not configured (ANTHROPIC_API_KEY missing) — cannot fall back")
+        return None
+
+    meme_data = load_meme_data()
+    try:
+        resp = await anthropic_client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=1536 if option_count == 1 else 4096,
+            system=_build_anthropic_system(meme_data, option_count),
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = "".join(
+            block.text for block in resp.content if getattr(block, "type", None) == "text"
+        ).strip()
+
+        if not raw:
+            logger.error("Anthropic fallback returned an empty response")
+            return None
+
+        # Defensive: strip accidental markdown fences even though the
+        # system prompt asks for raw JSON.
+        if raw.startswith("```"):
+            raw = raw.strip("`").strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as json_err:
+            logger.warning("Failed to parse Anthropic JSON: %s. Attempting recovery...", json_err)
+            last_brace = raw.rfind("},")
+            if last_brace > 0:
+                data = json.loads(raw[: last_brace + 1] + "]\n}")
+            else:
+                raise
+
+        output = data.get("output", []) if isinstance(data, dict) else data
+        if not output or not isinstance(output, list):
+            logger.error("Anthropic fallback returned empty/invalid output array")
+            return None
+
+        valid_memes: List[Dict[str, Any]] = []
+        for meme in output:
+            if not isinstance(meme, dict):
+                continue
+            meme_id = meme.get("meme_id") or meme.get("id")
+            meme_name = meme.get("meme_name") or meme.get("name")
+            meme_text = meme.get("meme_text") or meme.get("text")
+            if meme_id is None or not meme_name or not meme_text:
+                logger.warning("Skipping incomplete meme object from Anthropic: %s", meme)
+                continue
+            valid_memes.append({
+                "meme_id": int(meme_id),
+                "meme_name": str(meme_name),
+                "meme_text": list(meme_text) if isinstance(meme_text, list) else [str(meme_text)],
+                "reasoning": meme.get("reasoning", "Generated by Anthropic (Gemini fallback)"),
+            })
+
+        if not valid_memes:
+            logger.error("No valid memes parsed from Anthropic fallback response")
+            return None
+
+        logger.info("Anthropic fallback generated %d valid memes", len(valid_memes))
+        return valid_memes[:option_count]
+
+    except Exception as exc:
+        logger.exception("Anthropic fallback caption generation failed: %s", exc)
+        return None
+
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 async def get_caption_generator(provider: Optional[str] = None, option_count: int = 3):
-    """Return a caption generator using Gemini."""
-    
+    """
+    Return a caption generator with automatic Gemini -> Anthropic fallback.
+
+    Phase 2 remediation: previously a single Gemini outage (or quota
+    exhaustion) took down 100% of generation despite ANTHROPIC_API_KEY
+    being configured in every env file from the start. This wraps Gemini
+    with a circuit breaker (services/circuit_breaker.py) and transparently
+    falls back to Anthropic — if configured — when Gemini is failing or its
+    breaker is open. Callers don't need to know which provider actually
+    served a given request; `reasoning` in the returned dict says so if
+    you need to check.
+    """
+
     async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
+        if settings.has_gemini and await _gemini_circuit.allow_request():
+            try:
+                result = await asyncio.wait_for(
+                    generate_meme_captions_with_gemini(prompt, option_count=option_count),
+                    timeout=20.0,
+                )
+            except asyncio.TimeoutError:
+                logger.error("Gemini caption generation timed out after 20 seconds")
+                result = None
+            except Exception as exc:
+                logger.error("Gemini caption generation failed: %s", exc)
+                result = None
+
+            if result:
+                await _gemini_circuit.record_success()
+                return result
+
+            await _gemini_circuit.record_failure()
+            logger.warning(
+                "Gemini failed (circuit breaker state=%s) — falling back to Anthropic",
+                _gemini_circuit.state.value,
+            )
+        elif settings.has_gemini:
+            logger.warning("Gemini circuit breaker is OPEN — skipping straight to Anthropic fallback")
+
+        if not settings.has_anthropic:
+            logger.error("No fallback provider configured (ANTHROPIC_API_KEY missing) — generation failed")
+            return None
+
         try:
-            # 20-second timeout guard on overall generation
             return await asyncio.wait_for(
-                generate_meme_captions_with_gemini(prompt, option_count=option_count),
+                generate_meme_captions_with_anthropic(prompt, option_count=option_count),
                 timeout=20.0,
             )
         except asyncio.TimeoutError:
-            logger.error("AI caption generation timed out after 20 seconds")
+            logger.error("Anthropic fallback timed out after 20 seconds")
             return None
         except Exception as exc:
-            logger.error("Caption generation failed: %s", exc)
+            logger.error("Anthropic fallback failed: %s", exc)
             return None
 
     return robust_generator
