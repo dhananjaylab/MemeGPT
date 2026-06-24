@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 class ModerationResult:
     approved: bool
     reason: str
-    provider: str  # "gemini" | "anthropic" | "none" (disabled/unavailable)
+    provider: str  # "gemini" | "openai" | "anthropic" | "none" (disabled/unavailable)
 
 
 _MODERATION_SYSTEM_PROMPT = """You are a content moderator for a public, ad-supported meme-generation website with a general audience that includes teenagers.
@@ -100,8 +100,8 @@ async def _classify(captions: List[str]) -> Optional[ModerationResult]:
 
     # Local import: avoids a hard circular-import dependency at module load
     # time (meme_ai imports nothing from here), and means this module works
-    # even if meme_ai's Gemini/Anthropic clients fail to construct.
-    from services.meme_ai import gemini_client, anthropic_client
+    # even if meme_ai's Gemini/OpenAI/Anthropic clients fail to construct.
+    from services.meme_ai import gemini_client, openai_client, anthropic_client
 
     if gemini_client:
         try:
@@ -127,9 +127,33 @@ async def _classify(captions: List[str]) -> Optional[ModerationResult]:
                     reason=str(data.get("reason", "")),
                     provider="gemini",
                 )
-            logger.warning("Gemini moderation returned unparseable JSON; trying Anthropic")
+            logger.warning("Gemini moderation returned unparseable JSON; trying OpenAI")
         except Exception as exc:
-            logger.warning("Gemini moderation classification failed; trying Anthropic: %s", exc)
+            logger.warning("Gemini moderation classification failed; trying OpenAI: %s", exc)
+
+    if openai_client:
+        try:
+            resp = await openai_client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": _MODERATION_SYSTEM_PROMPT},
+                    {"role": "user", "content": joined},
+                ],
+                max_tokens=200,
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            raw = (resp.choices[0].message.content or "").strip()
+            data = _parse_json_response(raw)
+            if data is not None:
+                return ModerationResult(
+                    approved=bool(data.get("approved", False)),
+                    reason=str(data.get("reason", "")),
+                    provider="openai",
+                )
+            logger.warning("OpenAI moderation returned unparseable JSON; trying Anthropic")
+        except Exception as exc:
+            logger.warning("OpenAI moderation classification failed; trying Anthropic: %s", exc)
 
     if anthropic_client:
         try:
@@ -189,5 +213,3 @@ async def moderate_captions(captions: List[str]) -> ModerationResult:
         reason="Moderation provider unavailable — fail-open default",
         provider="none",
     )
-
-

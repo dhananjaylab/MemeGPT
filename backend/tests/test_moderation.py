@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -52,6 +53,28 @@ async def test_moderation_disabled_skips_provider_call(monkeypatch):
 
 
 # ── _classify paths ──────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_moderation_tries_openai_before_anthropic(monkeypatch):
+    monkeypatch.setattr("services.moderation.settings.moderation_enabled", True)
+
+    import services.meme_ai as meme_ai
+
+    gemini_fail = AsyncMock(side_effect=Exception("gemini down"))
+    openai_payload = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content='{"approved": true, "reason": "okay"}'))]
+    )
+    openai_create = AsyncMock(return_value=openai_payload)
+    anthropic_create = AsyncMock(return_value=SimpleNamespace(content=[]))
+
+    with patch.object(meme_ai, "gemini_client", SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=gemini_fail)))), \
+         patch.object(meme_ai, "openai_client", SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=openai_create)))), \
+         patch.object(meme_ai, "anthropic_client", SimpleNamespace(messages=SimpleNamespace(create=anthropic_create))):
+        result = await moderate_captions(["some caption"])
+
+    assert result.approved is True
+    assert result.provider == "openai"
+    openai_create.assert_awaited_once()
+    anthropic_create.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_fail_open_when_classify_returns_none(monkeypatch):

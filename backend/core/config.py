@@ -22,7 +22,11 @@ class Settings(BaseSettings):
     
     # Google Gemini
     gemini_api_key: str = ""
-    ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" preferred; "anthropic" is an automatic fallback, not user-selectable
+    ai_provider: str = Field(default="gemini", alias="AI_PROVIDER")  # "gemini" preferred; "openai" then "anthropic" are automatic fallbacks, not user-selectable
+
+    # OpenAI
+    openai_api_key: str = ""
+    openai_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_MODEL")
 
     # Google OAuth
     google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
@@ -43,6 +47,17 @@ class Settings(BaseSettings):
         """Heuristic check to avoid repeated API calls with a clearly bad key."""
         key = self.anthropic_api_key.strip()
         return bool(key and key.startswith("sk-ant-"))
+
+    @property
+    def has_openai(self) -> bool:
+        return bool(self.openai_api_key)
+
+    @property
+    def has_valid_openai_key(self) -> bool:
+        """Heuristic check to avoid repeated API calls with a clearly bad key."""
+        key = self.openai_api_key.strip()
+        return bool(key and key.startswith("sk-"))
+
     # Observability — Phase 2: these were referenced in every .env* file
     # and sentry-sdk/structlog were declared dependencies, but nothing ever
     # called sentry_sdk.init() or configured structlog. See core/sentry.py
@@ -198,4 +213,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
