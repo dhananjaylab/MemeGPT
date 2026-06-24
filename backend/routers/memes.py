@@ -598,6 +598,8 @@ async def get_templates(
             )
             for t in templates
         ]
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error fetching templates: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch templates")

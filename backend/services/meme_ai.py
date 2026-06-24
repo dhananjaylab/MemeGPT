@@ -28,6 +28,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import aiohttp
+
+# google-genai 1.46.x still references aiohttp.ClientConnectorDNSError, but
+# aiohttp 3.9.x exposes ClientConnectorError instead. Provide a compatibility
+# alias before importing google.genai so Gemini requests can still run.
+if not hasattr(aiohttp, "ClientConnectorDNSError"):
+    aiohttp.ClientConnectorDNSError = aiohttp.ClientConnectorError  # type: ignore[attr-defined]
+
 from google import genai
 from google.genai import types
 
@@ -69,14 +77,34 @@ gemini_client = genai.Client(
 
 try:
     import anthropic
-    anthropic_client: Optional["anthropic.AsyncAnthropic"] = (
-        anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        if settings.has_anthropic else None
-    )
+    anthropic_api_key = settings.anthropic_api_key.strip()
+    if anthropic_api_key and settings.has_valid_anthropic_key:
+        anthropic_client: Optional["anthropic.AsyncAnthropic"] = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
+    else:
+        anthropic_client = None
+        if anthropic_api_key:
+            logger.warning(
+                "Anthropic API key is present but does not look valid; skipping client initialization"
+            )
 except ImportError:
     anthropic = None  # type: ignore
     anthropic_client = None
 
+
+try:
+    from openai import AsyncOpenAI
+    openai_api_key = settings.openai_api_key.strip()
+    if openai_api_key and settings.has_valid_openai_key:
+        openai_client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=openai_api_key)
+    else:
+        openai_client = None
+        if openai_api_key:
+            logger.warning(
+                "OpenAI API key is present but does not look valid; skipping client initialization"
+            )
+except ImportError:
+    AsyncOpenAI = None  # type: ignore
+    openai_client = None
 # Trips after 3 consecutive Gemini failures, stays open for 30s before
 # allowing a single recovery probe. Process-local — see CircuitBreaker docstring.
 _gemini_circuit = CircuitBreaker(failure_threshold=3, recovery_timeout_seconds=30.0)
@@ -146,6 +174,24 @@ Rules:
 
 
 def _build_anthropic_system(meme_data: str, option_count: int = 3) -> str:
+    option_text = "1 meme option" if option_count == 1 else f"{option_count} different meme options"
+    return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
+
+{_GEN_Z_CONTEXT}
+
+Available templates: {meme_data}
+
+Rules:
+- Choose {option_text} that best fit the user's prompt
+- **CRITICAL**: Follow the EXACT ORDER specified in usage_instructions for each template
+- Text must be SHORT (max 10 words per field) and punchy
+- Match the exact number of text fields per template
+- Provide exactly {option_count} meme option{"s" if option_count != 1 else ""}
+
+Respond with ONLY a raw JSON object of this exact shape, no markdown fences, no commentary:
+{{"output": [{{"meme_id": <int>, "meme_name": "<string>", "meme_text": ["<string>", ...], "reasoning": "<string>"}}]}}"""
+
+def _build_openai_system(meme_data: str, option_count: int = 3) -> str:
     option_text = "1 meme option" if option_count == 1 else f"{option_count} different meme options"
     return f"""You are a Gen-Z meme genius who creates hilarious, relatable memes.
 
@@ -348,6 +394,83 @@ async def generate_meme_captions_with_gemini(
         return None
 
 
+
+# ── OpenAI (Gemini fallback, Anthropic next) ─────────────────────────────────
+
+async def generate_meme_captions_with_openai(
+    prompt: str,
+    option_count: int = 3,
+) -> Optional[List[Dict[str, Any]]]:
+    """Middle-tier fallback caption generator."""
+    if not openai_client:
+        logger.warning("OpenAI client not configured (OPENAI_API_KEY missing) — cannot fall back")
+        return None
+
+    meme_data = load_meme_data()
+    try:
+        resp = await openai_client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": _build_openai_system(meme_data, option_count)},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1536 if option_count == 1 else 4096,
+            temperature=1.0,
+            response_format={"type": "json_object"},
+        )
+
+        raw = (resp.choices[0].message.content or "").strip()
+        if not raw:
+            logger.error("OpenAI fallback returned an empty response")
+            return None
+
+        if raw.startswith("```"):
+            raw = raw.strip("`").strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as json_err:
+            logger.warning("Failed to parse OpenAI JSON: %s. Attempting recovery...", json_err)
+            last_brace = raw.rfind("},")
+            if last_brace > 0:
+                data = json.loads(raw[: last_brace + 1] + "]\n}")
+            else:
+                raise
+
+        output = data.get("output", []) if isinstance(data, dict) else data
+        if not output or not isinstance(output, list):
+            logger.error("OpenAI fallback returned empty/invalid output array")
+            return None
+
+        valid_memes: List[Dict[str, Any]] = []
+        for meme in output:
+            if not isinstance(meme, dict):
+                continue
+            meme_id = meme.get("meme_id") or meme.get("id")
+            meme_name = meme.get("meme_name") or meme.get("name")
+            meme_text = meme.get("meme_text") or meme.get("text")
+            if meme_id is None or not meme_name or not meme_text:
+                logger.warning("Skipping incomplete meme object from OpenAI: %s", meme)
+                continue
+            valid_memes.append({
+                "meme_id": int(meme_id),
+                "meme_name": str(meme_name),
+                "meme_text": list(meme_text) if isinstance(meme_text, list) else [str(meme_text)],
+                "reasoning": meme.get("reasoning", "Generated by OpenAI (Gemini fallback)"),
+            })
+
+        if not valid_memes:
+            logger.error("No valid memes parsed from OpenAI fallback response")
+            return None
+
+        logger.info("OpenAI fallback generated %d valid memes", len(valid_memes))
+        return valid_memes[:option_count]
+
+    except Exception as exc:
+        logger.exception("OpenAI fallback caption generation failed: %s", exc)
+        return None
 # ── Anthropic (Phase 2 — Gemini fallback) ─────────────────────────────────────
 
 async def generate_meme_captions_with_anthropic(
@@ -437,16 +560,16 @@ async def generate_meme_captions_with_anthropic(
 
 async def get_caption_generator(provider: Optional[str] = None, option_count: int = 3):
     """
-    Return a caption generator with automatic Gemini -> Anthropic fallback.
+    Return a caption generator with automatic Gemini -> OpenAI -> Anthropic fallback.
 
     Phase 2 remediation: previously a single Gemini outage (or quota
     exhaustion) took down 100% of generation despite ANTHROPIC_API_KEY
     being configured in every env file from the start. This wraps Gemini
     with a circuit breaker (services/circuit_breaker.py) and transparently
-    falls back to Anthropic — if configured — when Gemini is failing or its
-    breaker is open. Callers don't need to know which provider actually
-    served a given request; `reasoning` in the returned dict says so if
-    you need to check.
+    falls back to OpenAI first, then Anthropic — if configured — when
+    Gemini is failing or its breaker is open. Callers don't need to know
+    which provider actually served a given request; `reasoning` in the
+    returned dict says so if you need to check.
     """
 
     async def robust_generator(prompt: str) -> Optional[List[Dict[str, Any]]]:
@@ -469,14 +592,34 @@ async def get_caption_generator(provider: Optional[str] = None, option_count: in
 
             await _gemini_circuit.record_failure()
             logger.warning(
-                "Gemini failed (circuit breaker state=%s) — falling back to Anthropic",
+                "Gemini failed (circuit breaker state=%s) — falling back to OpenAI",
                 _gemini_circuit.state.value,
             )
         elif settings.has_gemini:
-            logger.warning("Gemini circuit breaker is OPEN — skipping straight to Anthropic fallback")
+            logger.warning("Gemini circuit breaker is OPEN — skipping straight to OpenAI fallback")
+
+        if settings.has_openai:
+            try:
+                result = await asyncio.wait_for(
+                    generate_meme_captions_with_openai(prompt, option_count=option_count),
+                    timeout=20.0,
+                )
+            except asyncio.TimeoutError:
+                logger.error("OpenAI fallback timed out after 20 seconds")
+                result = None
+            except Exception as exc:
+                logger.error("OpenAI fallback failed: %s", exc)
+                result = None
+
+            if result:
+                return result
+
+            logger.warning("OpenAI fallback unavailable or failed — falling back to Anthropic")
+        else:
+            logger.warning("OpenAI client is unavailable — skipping to Anthropic fallback")
 
         if not settings.has_anthropic:
-            logger.error("No fallback provider configured (ANTHROPIC_API_KEY missing) — generation failed")
+            logger.error("No fallback provider configured (OPENAI/ANTHROPIC_API_KEY missing) — generation failed")
             return None
 
         try:
