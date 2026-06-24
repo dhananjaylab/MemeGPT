@@ -29,14 +29,6 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# ── make the backend package importable ──────────────────────────────────────
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from core.config import settings
-from db.session import Base, get_db
-from models.models import GeneratedMeme, MemeJob, MemeTemplate, User
-from services.auth import create_access_token, REFRESH_COOKIE_NAME
-
 # ── force test-safe settings before any module is fully loaded ───────────────
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-long-enough-32x")
@@ -45,6 +37,16 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("GEMINI_API_KEY", "")
 os.environ.setdefault("ANTHROPIC_API_KEY", "")
 os.environ.setdefault("MODERATION_ENABLED", "false")
+os.environ.setdefault("GENERATION_BURST_LIMIT", "5")
+
+# ── make the backend package importable ──────────────────────────────────────
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from core.config import settings
+from db.session import Base, get_db
+from models.models import GeneratedMeme, MemeJob, MemeTemplate, User
+from services.auth import create_access_token, REFRESH_COOKIE_NAME
+
 
 # ── In-memory SQLite engine (shared across the session) ──────────────────────
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -64,6 +66,15 @@ _TestSessionLocal = async_sessionmaker(
 def event_loop_policy():
     """Use the default asyncio event loop policy for all tests."""
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Provide a session-scoped loop so session async fixtures can initialize."""
+    loop = asyncio.new_event_loop()
+    try:
+        yield loop
+    finally:
+        loop.close()
 
 
 @pytest_asyncio.fixture(scope="session")

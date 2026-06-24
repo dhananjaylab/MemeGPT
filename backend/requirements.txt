@@ -71,3 +71,5 @@ celery==5.3.4  # Alternative to ARQ if needed
 # Utilities
 python-slugify==8.0.1
 pytz==2023.3
+
+aiosqlite==0.22.1
