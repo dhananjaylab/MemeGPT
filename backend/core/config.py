@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     def has_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)
 
+    @property
+    def has_valid_anthropic_key(self) -> bool:
+        """Heuristic check to avoid repeated API calls with a clearly bad key."""
+        key = self.anthropic_api_key.strip()
+        return bool(key and key.startswith("sk-ant-"))
     # Observability — Phase 2: these were referenced in every .env* file
     # and sentry-sdk/structlog were declared dependencies, but nothing ever
     # called sentry_sdk.init() or configured structlog. See core/sentry.py
@@ -193,3 +198,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

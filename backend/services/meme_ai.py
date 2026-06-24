@@ -28,6 +28,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import aiohttp
+
+# google-genai 1.46.x still references aiohttp.ClientConnectorDNSError, but
+# aiohttp 3.9.x exposes ClientConnectorError instead. Provide a compatibility
+# alias before importing google.genai so Gemini requests can still run.
+if not hasattr(aiohttp, "ClientConnectorDNSError"):
+    aiohttp.ClientConnectorDNSError = aiohttp.ClientConnectorError  # type: ignore[attr-defined]
+
 from google import genai
 from google.genai import types
 
@@ -69,10 +77,15 @@ gemini_client = genai.Client(
 
 try:
     import anthropic
-    anthropic_client: Optional["anthropic.AsyncAnthropic"] = (
-        anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        if settings.has_anthropic else None
-    )
+    anthropic_api_key = settings.anthropic_api_key.strip()
+    if anthropic_api_key and settings.has_valid_anthropic_key:
+        anthropic_client: Optional["anthropic.AsyncAnthropic"] = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
+    else:
+        anthropic_client = None
+        if anthropic_api_key:
+            logger.warning(
+                "Anthropic API key is present but does not look valid; skipping client initialization"
+            )
 except ImportError:
     anthropic = None  # type: ignore
     anthropic_client = None
@@ -492,3 +505,5 @@ async def get_caption_generator(provider: Optional[str] = None, option_count: in
             return None
 
     return robust_generator
+
+

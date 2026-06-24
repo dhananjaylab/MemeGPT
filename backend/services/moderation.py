@@ -56,6 +56,40 @@ Reject (approved=false) if the text contains any of: sexual content, slurs or ha
 Mild crude humor, sarcasm, and profanity-free edgy jokes are fine — this is a meme site, not a children's app. When genuinely unsure between "edgy but fine" and "actually harmful", reject and explain why briefly."""
 
 
+def _parse_json_response(raw: str) -> Optional[dict]:
+    """Parse a model response that is supposed to be JSON.
+
+    We accept small amounts of damage from providers that emit extra prose
+    or truncated JSON, then fall back to the next provider.
+    """
+    candidate = raw.strip()
+    if not candidate:
+        return None
+
+    if candidate.startswith("```"):
+        candidate = candidate.strip("`").strip()
+        if candidate.lower().startswith("json"):
+            candidate = candidate[4:].strip()
+
+    try:
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    for end in range(len(candidate), 0, -1):
+        if candidate[end - 1] not in "}]":
+            continue
+        fragment = candidate[:end]
+        try:
+            parsed = json.loads(fragment)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            continue
+
+    return None
+
+
 async def _classify(captions: List[str]) -> Optional[ModerationResult]:
     """Run the structured moderation classification call. Returns None if
     no provider is available/reachable (caller decides fail-open vs
@@ -83,15 +117,19 @@ async def _classify(captions: List[str]) -> Optional[ModerationResult]:
                     response_mime_type="application/json",
                 ),
             )
-            raw = resp.candidates[0].content.parts[0].text.strip()
-            data = json.loads(raw)
-            return ModerationResult(
-                approved=bool(data.get("approved", False)),
-                reason=str(data.get("reason", "")),
-                provider="gemini",
-            )
+            raw = "".join(
+                part.text for part in resp.candidates[0].content.parts if getattr(part, "text", None)
+            ).strip()
+            data = _parse_json_response(raw)
+            if data is not None:
+                return ModerationResult(
+                    approved=bool(data.get("approved", False)),
+                    reason=str(data.get("reason", "")),
+                    provider="gemini",
+                )
+            logger.warning("Gemini moderation returned unparseable JSON; trying Anthropic")
         except Exception as exc:
-            logger.warning("Gemini moderation classification failed, trying Anthropic: %s", exc)
+            logger.warning("Gemini moderation classification failed; trying Anthropic: %s", exc)
 
     if anthropic_client:
         try:
@@ -104,12 +142,14 @@ async def _classify(captions: List[str]) -> Optional[ModerationResult]:
             raw = "".join(
                 block.text for block in resp.content if getattr(block, "type", None) == "text"
             ).strip()
-            data = json.loads(raw)
-            return ModerationResult(
-                approved=bool(data.get("approved", False)),
-                reason=str(data.get("reason", "")),
-                provider="anthropic",
-            )
+            data = _parse_json_response(raw)
+            if data is not None:
+                return ModerationResult(
+                    approved=bool(data.get("approved", False)),
+                    reason=str(data.get("reason", "")),
+                    provider="anthropic",
+                )
+            logger.warning("Anthropic moderation returned unparseable JSON")
         except Exception as exc:
             logger.warning("Anthropic moderation classification failed: %s", exc)
 
@@ -149,3 +189,5 @@ async def moderate_captions(captions: List[str]) -> ModerationResult:
         reason="Moderation provider unavailable — fail-open default",
         provider="none",
     )
+
+
