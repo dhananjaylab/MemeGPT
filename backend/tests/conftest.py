@@ -38,6 +38,7 @@ os.environ.setdefault("GEMINI_API_KEY", "")
 os.environ.setdefault("ANTHROPIC_API_KEY", "")
 os.environ.setdefault("MODERATION_ENABLED", "false")
 os.environ.setdefault("GENERATION_BURST_LIMIT", "5")
+os.environ.setdefault("GENERATION_BURST_WINDOW_SECONDS", "60")
 
 # ── make the backend package importable ──────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
